@@ -9,13 +9,13 @@
         <strong><%= link_to @project.rank, project_sourcerank_path(@project.to_param) %></strong>
       </td>
     </tr>
-    <% if @project.can_have_dependencies? %>
+    <% if @project.can_have_dependencies? && @project.latest_version %>
       <tr>
         <td>
           Dependencies
         </td>
         <td>
-          <strong><%= number_to_human(@project.dependencies.count.keys.length) %></strong>
+          <strong><%= number_to_human(@project.latest_version.dependencies.count) %></strong>
         </td>
       </tr>
       <tr>
@@ -42,7 +42,7 @@
       <td>
         <strong>
           <% if @project.can_have_versions? %>
-            <%= link_to number_to_human(@project.versions.count), project_versions_path(@project.to_param) %>
+            <%= link_to number_to_human(@project.versions.size), project_versions_path(@project.to_param) %>
           <% else %>
             <%= link_to number_to_human(@project.github_tags.count), project_tags_path(@project.to_param) %>
           <% end %>
@@ -51,7 +51,7 @@
     </tr>
     <tr>
       <td>
-        Latest <%= @project.release_or_tag %>
+        Latest <%= @project.release_or_tag.singularize %>
       </td>
       <td>
         <strong><%= timeago_tag(@project.latest_release.try(:published_at).presence || @project.updated_at) %></strong>
@@ -59,7 +59,7 @@
     </tr>
     <tr>
       <td>
-        First <%= @project.release_or_tag %>
+        First <%= @project.release_or_tag.singularize %>
       </td>
       <td>
         <strong><%= timeago_tag(@project.first_release.try(:published_at).presence || @project.github_repository.try(:created_at).presence || @project.created_at) %></strong>

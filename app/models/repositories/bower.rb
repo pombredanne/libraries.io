@@ -14,18 +14,12 @@ module Repositories
     def self.projects
       @projects ||= begin
         projects = {}
-        p1 = get("https://bower-component-list.herokuapp.com")
-        p2 = get("https://bower.herokuapp.com/packages")
+        data = get("https://bower.herokuapp.com/packages")
 
-        p2.each do |hash|
-          projects[hash['name'].downcase] = hash.slice('name', 'url', 'hits')
+        data.each do |hash|
+          projects[hash['name'].downcase] = hash.slice('name', 'url')
         end
 
-        p1.each do |hash|
-          if projects[hash['name'].downcase]
-            projects[hash['name'].downcase].merge! hash.slice('description', "owner", "website", "forks", "stars", "created", "updated","keywords")
-          end
-        end
         projects
       end
     end
@@ -35,12 +29,22 @@ module Repositories
     end
 
     def self.mapping(project)
+      bower_json = load_bower_json(project) || {}
       {
         :name => project["name"],
-        :description => project["description"],
-        :keywords_array => Array.wrap(project["keywords"]),
-        :repository_url => repo_fallback(project["website"], project["url"])
+        :repository_url => repo_fallback(nil, project["url"]),
+        :licenses => bower_json['license'],
+        :keywords_array => bower_json['keywords'],
+        :homepage => bower_json["homepage"],
+        :description => bower_json["description"]
       }
+    end
+
+    def self.load_bower_json(mapped_project)
+      return {} unless mapped_project['url']
+      github_name_with_owner = GithubUrls.parse(mapped_project['url'])
+      return {} unless github_name_with_owner
+      get_json("https://raw.githubusercontent.com/#{github_name_with_owner}/master/bower.json") rescue {}
     end
   end
 end

@@ -1,8 +1,17 @@
 class GithubIssue < ActiveRecord::Base
+  include IssueSearch
+
   belongs_to :github_repository
   belongs_to :github_user, primary_key: :github_id
 
   API_FIELDS = [:number, :state, :title, :body, :locked, :closed_at, :created_at, :updated_at]
+  FIRST_PR_LABELS = ['good first bug', 'good first contribution', 'good-first-bug',
+                     'first-timers-only', 'good first issue', 'good first task',
+                     'easy first bug', 'your first pr', 'firstbug', 'good-first-pr',
+                     '[Type] Good First Bug', 'good first patch', 'first bug',
+                     'good first step', 'good-first-issue', 'IdealFirstBug',
+                     'first contribution', 'first timers only', 'your-first-pr',
+                     'starter', 'beginner', 'easy', 'E-easy']
 
   scope :open, -> { where(state: 'open') }
   scope :closed, -> { where(state: 'closed') }
@@ -11,6 +20,9 @@ class GithubIssue < ActiveRecord::Base
   scope :locked, -> { where(locked: true) }
   scope :unlocked, -> { where(locked: false) }
   scope :actionable, -> { open.issue.unlocked }
+  scope :labeled, -> (label) { where.contains(labels: [label]) }
+  scope :help_wanted, -> { labeled('help wanted') }
+  scope :indexable, -> { actionable.includes(:github_repository) }
 
   def url
     path = pull_request ? 'pull' : 'issues'
@@ -19,6 +31,10 @@ class GithubIssue < ActiveRecord::Base
 
   def github_client(token = nil)
     AuthToken.fallback_client(token)
+  end
+
+  def sync(token = nil)
+    GithubIssueWorker.perform_async(github_repository.full_name, number, token)
   end
 
   def self.create_from_hash(repo, issue_hash)
@@ -33,5 +49,21 @@ class GithubIssue < ActiveRecord::Base
     i.last_synced_at = Time.now
     i.save! if i.changed?
     i
+  end
+
+  def contributions_count
+      github_repository.try(:github_contributions_count) || 0
+  end
+
+  def language
+      github_repository.try(:language)
+  end
+
+  def license
+      github_repository.try(:license)
+  end
+
+  def stars
+    github_repository.try(:stargazers_count) || 0
   end
 end

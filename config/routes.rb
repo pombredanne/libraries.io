@@ -11,16 +11,33 @@ Rails.application.routes.draw do
   namespace :api do
     get '/', to: 'docs#index'
     get '/search', to: 'search#index'
+    get '/bower-search', to: 'bower_search#index'
     get '/searchcode', to: 'projects#searchcode'
+
+    get '/subscriptions', to: 'subscriptions#index'
+    get '/subscription/:platform/:name', to: 'subscriptions#show'
+    post '/subscription/:platform/:name', to: 'subscriptions#create'
+    put '/subscription/:platform/:name', to: 'subscriptions#update'
+    delete '/subscription/:platform/:name', to: 'subscriptions#destroy'
+
+    get '/github/issues/help-wanted', to: 'github_issues#help_wanted'
+    get '/github/issues/first-pull-request', to: 'github_issues#first_pull_request'
+
+    get '/github/search', to: 'github_repositories#search'
+
+    get '/github/:login/repositories', to: 'github_users#repositories'
+    get '/github/:login/projects', to: 'github_users#projects'
 
     get '/github/:owner/:name/dependencies', to: 'github_repositories#dependencies', constraints: { :name => /[^\/]+/ }
     get '/github/:owner/:name/projects', to: 'github_repositories#projects', constraints: { :name => /[^\/]+/ }
     get '/github/:owner/:name', to: 'github_repositories#show', constraints: { :name => /[^\/]+/ }
 
-    get '/:platform/:name/:version/dependencies', to: 'projects#dependencies', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\-\_\%]+/, :version => /[\w\-\_\.]+/ }
-    get '/:platform/:name/dependent_repositories', to: 'projects#dependent_repositories', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\-\_\%]+/ }
-    get '/:platform/:name/dependents', to: 'projects#dependents', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\-\_\%]+/ }
-    get '/:platform/:name', to: 'projects#show', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\-\_\%]+/ }
+    get '/github/:login', to: 'github_users#show'
+
+    get '/:platform/:name/:version/dependencies', to: 'projects#dependencies', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\-\_\%]+/, :version => /[\w\.\-\_\.]+/ }
+    get '/:platform/:name/dependent_repositories', to: 'projects#dependent_repositories', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\.\-\_\%]+/ }
+    get '/:platform/:name/dependents', to: 'projects#dependents', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\.\-\_\%]+/ }
+    get '/:platform/:name', to: 'projects#show', constraints: { :platform => /[\w\-\_]+/, :name => /[\w\.\-\_\%]+/ }
   end
 
   namespace :admin do
@@ -87,6 +104,9 @@ Rails.application.routes.draw do
   get 'unmaintained-libraries', to: 'projects#unmaintained', as: :unmaintained
   get 'deprecated-libraries', to: 'projects#deprecated', as: :deprecated
   get 'removed-libraries', to: 'projects#removed', as: :removed
+
+  get '/help-wanted', to: 'github_issues#help_wanted', as: :help_wanted
+  get '/first-pull-request', to: 'github_issues#first_pull_request', as: :first_pull_request
 
   get '/platforms', to: 'platforms#index', as: :platforms
 

@@ -43,7 +43,7 @@ Rails.application.configure do
   # config.action_dispatch.x_sendfile_header = 'X-Accel-Redirect' # for NGINX
 
   # Force all access to the app over SSL, use Strict-Transport-Security, and use secure cookies.
-  config.force_ssl = true
+  config.force_ssl = ENV['FORCE_SSL']
 
   # Use the lowest log level to ensure availability of diagnostic information
   # when problems arise.
@@ -101,6 +101,4 @@ Rails.application.configure do
   config.action_mailer.delivery_method = :smtp
 
   config.lograge.enabled = true
-
-  config.middleware.use ApiRateLimit, :cache => Rails.cache, :key_prefix => :throttle, :max => 60
 end

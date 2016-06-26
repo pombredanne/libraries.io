@@ -3,7 +3,7 @@ class GithubRepository < ActiveRecord::Base
 
   STATUSES = ['Active', 'Deprecated', 'Unmaintained', 'Help Wanted', 'Removed']
 
-  API_FIELDS = [:description, :fork, :created_at, :updated_at, :pushed_at, :homepage,
+  API_FIELDS = [:full_name, :description, :fork, :created_at, :updated_at, :pushed_at, :homepage,
    :size, :stargazers_count, :language, :has_issues, :has_wiki, :has_pages,
    :forks_count, :mirror_url, :open_issues_count, :default_branch,
    :subscribers_count, :private]
@@ -57,6 +57,8 @@ class GithubRepository < ActiveRecord::Base
   scope :not_removed, -> { where('github_repositories."status" != ? OR github_repositories."status" IS NULL', "Removed")}
   scope :removed, -> { where('github_repositories."status" = ?', "Removed")}
   scope :unmaintained, -> { where('github_repositories."status" = ?', "Unmaintained")}
+
+  scope :indexable, -> { open_source.not_removed.includes(:projects) }
 
   def self.language(language)
     where('lower(github_repositories.language) = ?', language.try(:downcase))
@@ -116,7 +118,7 @@ class GithubRepository < ActiveRecord::Base
   end
 
   def repository_dependencies
-    manifests.latest.includes(repository_dependencies: :project).map(&:repository_dependencies).flatten.uniq
+    manifests.latest.includes({repository_dependencies: {project: :versions}}).map(&:repository_dependencies).flatten.uniq
   end
 
   def owner

@@ -11,7 +11,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20160430125837) do
+ActiveRecord::Schema.define(version: 20160613102148) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -19,10 +19,11 @@ ActiveRecord::Schema.define(version: 20160430125837) do
 
   create_table "api_keys", force: :cascade do |t|
     t.string   "access_token"
-    t.datetime "created_at",   null: false
-    t.datetime "updated_at",   null: false
+    t.datetime "created_at",                null: false
+    t.datetime "updated_at",                null: false
     t.integer  "user_id"
     t.datetime "deleted_at"
+    t.integer  "rate_limit",   default: 60
   end
 
   add_index "api_keys", ["access_token"], name: "index_api_keys_on_access_token", using: :btree
@@ -170,6 +171,10 @@ ActiveRecord::Schema.define(version: 20160430125837) do
     t.string   "location"
     t.boolean  "hidden",         default: false
     t.datetime "last_synced_at"
+    t.string   "email"
+    t.string   "bio"
+    t.integer  "followers"
+    t.integer  "following"
   end
 
   add_index "github_users", ["created_at"], name: "index_github_users_on_created_at", using: :btree
@@ -430,6 +435,7 @@ ActiveRecord::Schema.define(version: 20160430125837) do
     t.boolean  "token_upgrade",      default: false
     t.boolean  "currently_syncing",  default: false
     t.datetime "last_synced_at"
+    t.boolean  "emails_enabled",     default: true
   end
 
   add_index "users", ["created_at"], name: "index_users_on_created_at", using: :btree

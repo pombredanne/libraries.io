@@ -23,8 +23,10 @@ class GithubRepositoriesController < ApplicationController
   def search
     @query = params[:q]
     @search = GithubRepository.search(params[:q], filters: {
-      license: current_license,
-      language: current_language
+      license: current_licenses,
+      language: current_languages,
+      keywords: current_keywords,
+      platforms: current_platforms
     }, sort: format_sort, order: format_order).paginate(page: page_number, per_page: per_page_number)
     @suggestion = @search.response.suggest.did_you_mean.first
     @github_repositories = @search.records
@@ -59,10 +61,10 @@ class GithubRepositoriesController < ApplicationController
   def show
     load_repo
     @contributors = @github_repository.contributors.order('count DESC').visible.limit(20)
-    @projects = @github_repository.projects
+    @projects = @github_repository.projects.limit(20).includes(:versions)
     @color = @github_repository.color
     @forks = @github_repository.forked_repositories.interesting.limit(5)
-    @manifests = @github_repository.manifests.latest.limit(10).includes(repository_dependencies: :project)
+    @manifests = @github_repository.manifests.latest.limit(10).includes(repository_dependencies: {project: :versions})
   end
 
   def contributors
@@ -99,16 +101,6 @@ class GithubRepositoriesController < ApplicationController
 
   def current_license
     params[:license] if params[:license].present?
-  end
-
-  def format_sort
-    return nil unless params[:sort].present?
-    allowed_sorts.include?(params[:sort]) ? params[:sort] : nil
-  end
-
-  def format_order
-    return nil unless params[:order].present?
-    ['desc', 'asc'].include?(params[:order]) ? params[:order] : nil
   end
 
   def allowed_sorts

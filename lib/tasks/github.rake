@@ -7,7 +7,7 @@ namespace :github do
 
   desc 'Reindex the search'
   task reindex: [:environment, :recreate_index] do
-    GithubRepository.import
+    GithubRepository.indexable.import
   end
 
   task sync_users: :environment do
@@ -24,5 +24,20 @@ namespace :github do
     trending = GithubRepository.open_source.where.not(pushed_at: nil).maintained.recently_created.hacker_news.limit(30).select('id')
     brand_new = GithubRepository.open_source.where.not(pushed_at: nil).maintained.recently_created.order('created_at DESC').limit(60).select('id')
     (trending + brand_new).uniq.each{|g| GithubDownloadWorker.perform_async(g.id) }
+  end
+
+  task update_issues: :environment do
+    ids = GithubIssue.where('last_synced_at < ?', Date.parse('2016-05-02T15:37:07Z')).uniq.pluck(:github_repository_id)
+    ids.each{|id| GithubDownloadWorker.perform_async(id) }
+  end
+
+  task update_repos: :environment do
+    ids = GithubRepository.open_source.maintained.where('last_synced_at < ?', Date.parse('2016-05-01T15:37:07Z')).where(has_issues: true).source.pluck(:id)
+    ids.each{|id| GithubDownloadWorker.perform_async(id) }
+  end
+
+  task sync_issues: :environment do
+    GithubIssue.search('').records.includes(:github_repository).find_each(&:sync)
+    GithubIssue.first_pr_search('').records.includes(:github_repository).find_each(&:sync)
   end
 end

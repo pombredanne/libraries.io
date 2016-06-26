@@ -1,11 +1,13 @@
 class Api::ApplicationController < ApplicationController
   skip_before_action :verify_authenticity_token
-  before_filter :set_headers
+  before_action :check_api_key, :set_headers
+
+  rescue_from ActiveRecord::RecordNotFound, with: :record_not_found
 
   private
 
-  def max_page
-    1000
+  def record_not_found(error)
+    render json: { error: "404 Not Found" }, status: :not_found
   end
 
   def set_headers
@@ -17,16 +19,24 @@ class Api::ApplicationController < ApplicationController
   end
 
   def check_api_key
-    render :json => error_message, :status => :bad_request unless api_key_present?
+    return true if params[:api_key].nil?
+    render :json => error_message, :status => :bad_request unless valid_api_key_present?
   end
 
-  def api_key_present?
-    return true if Rails.env.development?
+  def require_api_key
+    render :json => error_message, :status => :bad_request unless valid_api_key_present?
+  end
 
-    # FIXME temporary, shields.io is not sending a key at the moment
-    return true if params[:api_key].nil?
+  def valid_api_key_present?
+    params[:api_key].present? && current_api_key
+  end
 
-    params[:api_key].present? && ApiKey.active.find_by_access_token(params[:api_key])
+  def current_api_key
+    ApiKey.active.find_by_access_token(params[:api_key])
+  end
+
+  def current_user
+    current_api_key.try(:user)
   end
 
   def error_message

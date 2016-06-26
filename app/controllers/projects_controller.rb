@@ -4,7 +4,7 @@ class ProjectsController < ApplicationController
   def index
     if current_user
       muted_ids = params[:include_muted].present? ? [] : current_user.muted_project_ids
-      @versions = current_user.all_subscribed_versions.where.not(project_id: muted_ids).where.not(published_at: nil).newest_first.includes(:project).paginate(per_page: 20, page: page_number)
+      @versions = current_user.all_subscribed_versions.where.not(project_id: muted_ids).where.not(published_at: nil).newest_first.includes(project: :versions).paginate(per_page: 20, page: page_number)
       @projects = current_user.recommended_projects.limit(7)
       render 'dashboard/home'
     else
@@ -18,30 +18,21 @@ class ProjectsController < ApplicationController
   end
 
   def bus_factor
-    # if params[:language].present?
-    #   @language = Project.language(params[:language].downcase).first.try(:language)
-    #   raise ActiveRecord::RecordNotFound if @language.nil?
-    #   scope = Project.language(@language)
-    # else
-      # scope = Project
-    # end
-
-    @languages = [] # Project.bus_factor.group('projects.language').count.sort_by(&:last).reverse.first(20)
-    @projects = Project.bus_factor.order('github_repositories.github_contributions_count ASC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    @search = Project.bus_factor_search(filters: {
+      platform: current_platform,
+      normalized_licenses: current_license,
+      language: current_language
+    }).paginate(page: page_number)
+    @projects = @search.records.includes(:github_repository, :versions)
   end
 
   def unlicensed
-    # if params[:platform].present?
-    #   find_platform(:platform)
-    #   raise ActiveRecord::RecordNotFound if @platform_name.nil?
-    #   scope = Project.platform(@platform_name)
-    # else
-    #   scope = Project
-    # end
-
-    @platforms = [] #Project.unlicensed.group('platform').count.sort_by(&:last).reverse
-    order = params[:newest] ? 'projects.created_at DESC' : 'projects.dependents_count DESC, projects.rank DESC, projects.created_at DESC'
-    @projects = Project.unlicensed.includes(:github_repository).order(order).paginate(page: page_number, per_page: 20)
+    @search = Project.unlicensed_search(filters: {
+      platform: current_platform,
+      normalized_licenses: current_license,
+      language: current_language
+    }).paginate(page: page_number)
+    @projects = @search.records.includes(:github_repository, :versions)
   end
 
   def deprecated
@@ -54,7 +45,7 @@ class ProjectsController < ApplicationController
     end
 
     @platforms = Project.deprecated.group('platform').count.sort_by(&:last).reverse
-    @projects = scope.deprecated.order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    @projects = scope.deprecated.includes(:github_repository, :versions).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
   end
 
   def removed
@@ -67,7 +58,7 @@ class ProjectsController < ApplicationController
     end
 
     @platforms = Project.removed.group('platform').count.sort_by(&:last).reverse
-    @projects = scope.removed.order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    @projects = scope.removed.includes(:github_repository, :versions).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
   end
 
   def unmaintained
@@ -80,7 +71,7 @@ class ProjectsController < ApplicationController
     end
 
     @platforms = Project.unmaintained.group('platform').count.sort_by(&:last).reverse
-    @projects = scope.unmaintained.order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    @projects = scope.unmaintained.includes(:github_repository, :versions).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
   end
 
   def show
@@ -93,7 +84,7 @@ class ProjectsController < ApplicationController
       end
     end
     find_version
-    @dependencies = (@versions.length > 0 ? (@version || @versions.first).dependencies.includes(:project).order('project_name ASC').limit(100) : [])
+    @dependencies = (@versions.size > 0 ? (@version || @versions.first).dependencies.includes(project: :versions).order('project_name ASC').limit(100) : [])
     @contributors = @project.contributors.order('count DESC').visible.limit(20)
   end
 
@@ -129,7 +120,7 @@ class ProjectsController < ApplicationController
     if incorrect_case?
       return redirect_to(project_versions_path(@project.to_param), :status => :moved_permanently)
     else
-      @versions = @project.versions.newest_first.sort.paginate(page: page_number)
+      @versions = @project.versions.sort.paginate(page: page_number)
       respond_to do |format|
         format.html
         format.atom
@@ -173,7 +164,7 @@ class ProjectsController < ApplicationController
   end
 
   def find_version
-    @version_count = @project.versions.newest_first.count
+    @version_count = @project.versions.size
     @github_repository = @project.github_repository
     if @version_count.zero?
       @versions = []
@@ -190,12 +181,26 @@ class ProjectsController < ApplicationController
         raise ActiveRecord::RecordNotFound if params[:number].present?
       end
     else
-      @versions = @project.versions.newest_first.to_a.sort.first(10)
+      @versions = @project.versions.sort.first(10)
       if params[:number].present?
         @version = @project.versions.find_by_number(params[:number])
         raise ActiveRecord::RecordNotFound if @version.nil?
       end
     end
     @version_number = @version.try(:number) || @project.latest_release_number
+  end
+
+  private
+
+  def current_platform
+    Download.format_name(params[:platforms])
+  end
+
+  def current_language
+    Languages::Language[params[:language]].to_s if params[:language].present?
+  end
+
+  def current_license
+    Spdx.find(params[:license]).try(:id) if params[:license].present?
   end
 end

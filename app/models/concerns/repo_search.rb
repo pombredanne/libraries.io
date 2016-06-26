@@ -16,6 +16,8 @@ module RepoSearch
         indexes :homepage
         indexes :language, :index => :not_analyzed
         indexes :license, :index => :not_analyzed
+        indexes :keywords, :index => :not_analyzed
+        indexes :platforms, :index => :not_analyzed
 
         indexes :status, :index => :not_analyzed
         indexes :default_branch, :index => :not_analyzed
@@ -53,11 +55,19 @@ module RepoSearch
     after_save() { __elasticsearch__.index_document }
 
     def as_indexed_json(options = {})
-      as_json methods: [:exact_name]
+      as_json methods: [:exact_name, :keywords, :platforms]
     end
 
     def exact_name
       full_name
+    end
+
+    def keywords
+      projects.map(&:keywords_array).flatten.compact.uniq(&:downcase)
+    end
+
+    def platforms
+      projects.map(&:platform).compact.uniq(&:downcase)
     end
 
     def self.total
@@ -68,7 +78,7 @@ module RepoSearch
 
     def self.search(query, options = {})
       facet_limit = options.fetch(:facet_limit, 35)
-      query = sanitize_query(query)
+      query = Project.sanitize_query(query)
       options[:filters] ||= []
       options[:must_not] ||= []
       search_definition = {
@@ -120,7 +130,7 @@ module RepoSearch
             },
             facet_filter: {
               bool: {
-                must: filter_format(options[:filters], :language)
+                must: Project.filter_format(options[:filters], :language)
               }
             }
           },
@@ -131,7 +141,18 @@ module RepoSearch
             },
             facet_filter: {
               bool: {
-                must: filter_format(options[:filters], :license)
+                must: Project.filter_format(options[:filters], :license)
+              }
+            }
+          },
+          keywords: {
+            terms: {
+              field: "keywords",
+              size: facet_limit
+            },
+            facet_filter: {
+              bool: {
+                must: Project.filter_format(options[:filters], :keywords)
               }
             }
           }
@@ -154,7 +175,7 @@ module RepoSearch
       }
       search_definition[:sort]  = { (options[:sort] || '_score') => (options[:order] || 'desc') }
       search_definition[:track_scores] = true
-      search_definition[:filter][:bool][:must] = filter_format(options[:filters])
+      search_definition[:filter][:bool][:must] = Project.filter_format(options[:filters])
 
       if query.present?
         search_definition[:query][:function_score][:query][:filtered][:query] = {
@@ -177,35 +198,6 @@ module RepoSearch
       end
 
       __elasticsearch__.search(search_definition)
-    end
-
-    def self.filter_format(filters, except = nil)
-      filters.select { |k, v| v.present? && k != except }.map do |k, v|
-        {
-          term: { k => v }
-        }
-      end
-    end
-
-    def self.sanitize_query(str)
-      return '' if str.blank?
-      # Escape special characters
-      # http://lucene.apache.org/core/old_versioned_docs/versions/2_9_1/queryparsersyntax.html#Escaping Special Characters
-      escaped_characters = Regexp.escape('\\+-&|/!(){}[]^~?:')
-      str = str.gsub(/([#{escaped_characters}])/, '\\\\\1')
-
-      # AND, OR and NOT are used by lucene as logical operators. We need
-      # to escape them
-      ['AND', 'OR', 'NOT'].each do |word|
-        escaped_word = word.split('').map {|char| "\\#{char}" }.join('')
-        str = str.gsub(/\s*\b(#{word.upcase})\b\s*/, " #{escaped_word} ")
-      end
-
-      # Escape odd quotes
-      quote_count = str.count '"'
-      str = str.gsub(/(.*)"(.*)/, '\1\"\3') if quote_count % 2 == 1
-
-      str
     end
   end
 end

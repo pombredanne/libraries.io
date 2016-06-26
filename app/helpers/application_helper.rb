@@ -105,7 +105,7 @@ module ApplicationHelper
   end
 
   def rss_url(project)
-    if project.versions.count > 0
+    if project.versions.size > 0
       project_versions_url({format: "atom"}.merge(project.to_param))
     elsif project.github_repository && project.github_tags.length > 0
       project_tags_url({format: "atom"}.merge(project.to_param))
@@ -341,5 +341,17 @@ module ApplicationHelper
       hash = {}
     end
     default_meta_tags.merge(hash)
+  end
+
+  def featured_orgs
+    ['ebayinc','ibm','cloudant','microsoft', 'hmrc','dpspublishing', 'clearleft',
+     'google','thoughtworks','yelp','alphagov','nbcnews','openshift', 'ansible',
+     'heroku','github','thoughtbot','shopify','travis-ci','redhat-developer',
+     'mozilla','django','jenkinsci','the-economist-editorial','angular','emberjs',
+     'nearform','futurelearn','scaleway','producthunt','mysociety','sublimetext',
+     'codeforamerica','cdnjs','nodejs', 'simpleweb','mashape','yeoman','src-d',
+     'ustwo','coderdojo','cfibmers','keystonejs','tableflip','teamtito','codacy',
+     'saltstack','baremetrics','vmware','uswitch','gocardless','ucl','Leanstack',
+     'airbrake','18f','joyent','liferay']
   end
 end

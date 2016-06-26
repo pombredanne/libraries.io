@@ -1,16 +1,20 @@
 class Api::ProjectsController < Api::ApplicationController
-  before_action :find_project, :check_api_key, except: :searchcode
+  before_action :find_project, except: :searchcode
 
   def show
-    render json: @project.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :keywords], include: {versions: {only: [:number, :published_at]} })
+    render json: @project.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords, :latest_stable_release], include: {versions: {only: [:number, :published_at]} })
   end
 
   def dependents
-    render json: @project.dependent_projects.paginate(page: page_number).as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :keywords], include: {versions: {only: [:number, :published_at]} })
+    @dependents = WillPaginate::Collection.create(page_number, per_page_number, @project.dependents_count) do |pager|
+      pager.replace(@project.dependent_projects(page: page_number).includes(:versions, :github_repository))
+    end
+
+    render json: @dependents.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} })
   end
 
   def dependent_repositories
-    render json: @project.dependent_repositories.paginate(page: page_number).as_json(except: [:id, :github_organisation_id, :owner_id])
+    paginate json: @project.dependent_repositories.as_json(except: [:id, :github_organisation_id, :owner_id])
   end
 
   def searchcode
@@ -19,7 +23,7 @@ class Api::ProjectsController < Api::ApplicationController
 
   def dependencies
     version = if params[:version] == 'latest'
-      @project.versions.newest_first.first
+      @project.versions.first
     else
       @project.versions.find_by_number(params[:version])
     end
@@ -41,7 +45,7 @@ class Api::ProjectsController < Api::ApplicationController
       }
     end
 
-    project_json = @project.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :keywords])
+    project_json = @project.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords])
     project_json[:dependencies] = deps
 
     render json: project_json

@@ -1,5 +1,5 @@
 class Api::GithubRepositoriesController < Api::ApplicationController
-  before_action :check_api_key, :find_repo
+  before_action :find_repo, except: :search
 
   def show
     render json: @github_repository.as_json({
@@ -8,7 +8,7 @@ class Api::GithubRepositoriesController < Api::ApplicationController
   end
 
   def projects
-    render json: @github_repository.projects.paginate(page: page_number).as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :keywords], include: {versions: {only: [:number, :published_at]} })
+    paginate json: @github_repository.projects.includes(:versions, :github_repository).as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} })
   end
 
   def dependencies
@@ -35,6 +35,17 @@ class Api::GithubRepositoriesController < Api::ApplicationController
     render json: repo_json
   end
 
+  def search
+    @search = paginate GithubRepository.search(params[:q], filters: {
+      license: current_licenses,
+      language: current_languages,
+      keywords: current_keywords,
+      platforms: current_platforms
+    }, sort: format_sort, order: format_order), page: page_number, per_page: per_page_number
+    @github_repositories = @search.records
+    render json: @github_repositories.as_json({ except: [:id, :github_organisation_id, :owner_id] })
+  end
+
   private
 
   def find_repo
@@ -42,5 +53,9 @@ class Api::GithubRepositoriesController < Api::ApplicationController
     @github_repository = GithubRepository.open_source.where('lower(full_name) = ?', full_name.downcase).first
 
     raise ActiveRecord::RecordNotFound if @github_repository.nil?
+  end
+
+  def allowed_sorts
+    ['stargazers_count', 'github_contributions_count', 'created_at', 'pushed_at', 'subscribers_count', 'open_issues_count', 'forks_count', 'size']
   end
 end

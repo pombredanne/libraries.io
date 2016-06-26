@@ -1,5 +1,5 @@
 @import "bootstrap-sprockets";
-@import "bootstrap";
+@import "bootstrap-custom";
 @import "font-awesome";
 @import "tipsy";
 @import "pictogram";
@@ -30,7 +30,7 @@ footer{
 
 @media (min-width: 980px) {
   body {
-    padding: 60px 0 220px;
+    padding: 60px 0 270px;
   }
   footer{
     position: absolute;
@@ -164,13 +164,13 @@ h3,h4{
   margin-bottom: 30px;
   small{
     color: #999;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.3;
     a {
       color: #777;
     }
-    .label-default{
-      color: #fff;
+    .label{
+      color: #000;
     }
   }
 }
@@ -344,6 +344,7 @@ a.rss{
 
 .table.repositories td, #matrix td, #web_hooks td{
   vertical-align: middle;
+  word-break: break-word;
 }
 
 tr.top td{
@@ -407,4 +408,10 @@ tr.top td{
     .github-corner .octo-arm {
         animation: octocat-wave 560ms ease-in-out;
     }
+}
+
+.featured-org{
+  margin: 5px;
+  display: block;
+  float: left;
 }

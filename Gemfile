@@ -1,6 +1,7 @@
 source 'https://rubygems.org'
 ruby '2.3.1'
 
+gem 'dotenv-rails', :require => 'dotenv/rails-now'
 gem 'rb-readline'
 gem 'oj'
 gem 'rails', '4.2.6'
@@ -58,6 +59,10 @@ gem 'github_urls'
 gem 'mail', require: ['mail', 'mail/utilities', 'mail/parsers']
 gem 'pictogram'
 gem 'rails-timeago', github: 'librariesio/rails-timeago'
+gem 'multi_fetch_fragments'
+gem 'rack-attack'
+gem 'rack-attack-rate-limit', require: 'rack/attack/rate-limit'
+gem 'api-pagination'
 
 group :development do
   gem 'bundler'
@@ -65,10 +70,12 @@ group :development do
   gem 'quiet_assets'
   gem 'sql_queries_count'
   gem 'brakeman', :require => false
+  gem 'capistrano'
+  gem 'capistrano-rails'
+  gem 'capistrano3-nginx'
 end
 
 group :development, :test do
-  gem 'dotenv-rails'
   gem 'rspec-rails'
   gem 'coveralls', require: false
 end
@@ -83,5 +90,4 @@ group :production do
   gem 'bugsnag'
   gem 'lograge'
   gem 'rails_safe_tasks'
-  gem 'rack-throttle'
 end

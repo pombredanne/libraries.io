@@ -26,6 +26,7 @@ module Searchable
         indexes :created_at, type: 'date'
         indexes :updated_at, type: 'date'
         indexes :latest_release_published_at, type: 'date'
+        indexes :pushed_at, type: 'date'
 
         indexes :rank, type: 'integer'
         indexes :stars, type: 'integer'
@@ -39,11 +40,15 @@ module Searchable
     after_save() { __elasticsearch__.index_document }
 
     def as_indexed_json(options = {})
-      as_json methods: [:stars, :repo_name, :exact_name, :github_contributions_count]
+      as_json methods: [:stars, :repo_name, :exact_name, :github_contributions_count, :pushed_at]
     end
 
     def exact_name
       name
+    end
+
+    def pushed_at
+      github_repository.try(:pushed_at)
     end
 
     def self.total
@@ -52,9 +57,158 @@ module Searchable
       end
     end
 
-    def self.search(query, options = {})
+    def self.bus_factor_search(options = {})
       facet_limit = options.fetch(:facet_limit, 35)
       query = sanitize_query(query)
+      options[:filters] ||= []
+      search_definition = {
+        query: {
+          function_score: {
+            query: {
+              filtered: {
+                 query: {match_all: {}},
+                 filter:{
+                   bool: {
+                     must: [
+                      {
+                        range: {
+                          github_contributions_count: {
+                            lte: 5,
+                            gte: 1
+                          }
+                        }
+                      }
+                     ],
+                     must_not: [
+                       {
+                         term: {
+                           "status" => "Removed"
+                         },
+                       },
+                       {
+                         term: {
+                           "status" => "Unmaintained"
+                         }
+                       }
+                     ]
+                  }
+                }
+              }
+            },
+            field_value_factor: {
+              field: "rank",
+              "modifier": "square"
+            }
+          }
+        },
+        facets: {
+          language: { terms: {
+              field: "language",
+              size: facet_limit
+            },
+            facet_filter: {
+              bool: {
+                must: filter_format(options[:filters], :language)
+              }
+            }
+          },
+          licenses: {
+            terms: {
+              field: "normalized_licenses",
+              size: facet_limit
+            },
+            facet_filter: {
+              bool: {
+                must: filter_format(options[:filters], :normalized_licenses)
+              }
+            }
+          }
+        },
+        filter: {
+          bool: {
+            must: []
+          }
+        }
+      }
+      search_definition[:filter][:bool][:must] = filter_format(options[:filters])
+      search_definition[:sort]  = [{'github_contributions_count' => 'asc'}, {'rank' => 'desc'}]
+      __elasticsearch__.search(search_definition)
+    end
+
+    def self.unlicensed_search(options = {})
+      facet_limit = options.fetch(:facet_limit, 35)
+      query = sanitize_query(query)
+      options[:filters] ||= []
+      search_definition = {
+        query: {
+          function_score: {
+            query: {
+              filtered: {
+                 query: {match_all: {}},
+                 filter:{
+                   bool: {
+                     must_not: [
+                       {
+                         exists: {
+                           field: "normalized_licenses"
+                         },
+                       },
+                       {
+                         term: {
+                           "status" => "Removed"
+                         },
+                       },
+                       {
+                         term: {
+                           "status" => "Unmaintained"
+                         }
+                       }
+                     ]
+                  }
+                }
+              }
+            },
+            field_value_factor: {
+              field: "rank",
+              "modifier": "square"
+            }
+          }
+        },
+        facets: {
+          language: { terms: {
+              field: "language",
+              size: facet_limit
+            },
+            facet_filter: {
+              bool: {
+                must: filter_format(options[:filters], :language)
+              }
+            }
+          },
+          platforms: { terms: {
+            field: "platform",
+            size: facet_limit},
+            facet_filter: {
+              bool: {
+                must: filter_format(options[:filters], :platform)
+              }
+            }
+          }
+        },
+        filter: {
+          bool: {
+            must: []
+          }
+        }
+      }
+      search_definition[:filter][:bool][:must] = filter_format(options[:filters])
+      search_definition[:sort]  = [{'github_contributions_count' => 'asc'}, {'rank' => 'desc'}]
+      __elasticsearch__.search(search_definition)
+    end
+
+    def self.search(original_query, options = {})
+      facet_limit = options.fetch(:facet_limit, 35)
+      query = sanitize_query(original_query)
       options[:filters] ||= []
       search_definition = {
         query: {
@@ -162,14 +316,23 @@ module Searchable
         search_definition[:sort]  = [{'rank' => 'desc'}, {'stars' => 'desc'}]
       end
 
+      if options[:prefix].present?
+        search_definition[:query][:function_score][:query][:filtered][:query] = {
+          prefix: { exact_name: original_query }
+        }
+        search_definition[:sort]  = [{'rank' => 'desc'}, {'stars' => 'desc'}]
+      end
+
       __elasticsearch__.search(search_definition)
     end
 
     def self.filter_format(filters, except = nil)
       filters.select { |k, v| v.present? && k != except }.map do |k, v|
-        {
-          term: { k => v }
-        }
+        Array(v).map do |value|
+          {
+            terms: { k => v.split(',') }
+          }
+        end
       end
     end
 

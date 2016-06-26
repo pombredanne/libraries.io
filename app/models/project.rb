@@ -3,7 +3,9 @@ class Project < ActiveRecord::Base
   include SourceRank
   HAS_DEPENDENCIES = false
   STATUSES = ['Active', 'Deprecated', 'Unmaintained', 'Help Wanted', 'Removed']
-  API_FIELDS = [:name, :platform, :description, :language, :homepage, :repository_url, :normalized_licenses, :rank, :status]
+  API_FIELDS = [:name, :platform, :description, :language, :homepage,
+                :repository_url, :normalized_licenses, :rank, :status,
+                :latest_release_number, :latest_release_published_at]
 
   validates_presence_of :name, :platform
 
@@ -56,6 +58,7 @@ class Project < ActiveRecord::Base
   scope :removed, -> { where('projects."status" = ?', "Removed")}
   scope :unmaintained, -> { where('projects."status" = ?', "Unmaintained")}
 
+  scope :indexable, -> { not_removed.includes(:versions, github_repository: :github_tags) }
 
   scope :bus_factor, -> { maintained.
                           joins(:github_repository)
@@ -66,10 +69,10 @@ class Project < ActiveRecord::Base
 
   after_commit :update_github_repo_async, on: :create
   after_commit :set_dependents_count
+  after_commit :update_source_rank_async
   before_save  :normalize_licenses,
                :set_latest_release_published_at,
                :set_latest_release_number,
-               :set_source_rank,
                :set_language
 
   before_destroy :destroy_versions
@@ -126,11 +129,11 @@ class Project < ActiveRecord::Base
   end
 
   def stable_releases
-    versions.newest_first.select(&:stable?)
+    versions.select(&:stable?)
   end
 
   def prereleases
-    versions.newest_first.select(&:prerelease?)
+    versions.select(&:prerelease?)
   end
 
   def latest_stable_version
@@ -151,7 +154,7 @@ class Project < ActiveRecord::Base
   end
 
   def latest_version
-    @latest_version ||= versions.newest_first.sort.first
+    @latest_version ||= versions.sort.first
   end
 
   def latest_tag
@@ -164,7 +167,7 @@ class Project < ActiveRecord::Base
   end
 
   def first_version
-    @first_version ||= versions.order('published_at ASC').first
+    @first_version ||= versions.sort.last
   end
 
   def first_tag
@@ -240,6 +243,10 @@ class Project < ActiveRecord::Base
     github_repository.try(:stargazers_count) || 0
   end
 
+  def forks
+    github_repository.try(:forks_count) || 0
+  end
+
   def set_language
     return unless github_repository
     self.language = github_repository.try(:language)
@@ -286,6 +293,10 @@ class Project < ActiveRecord::Base
     where.contains(keywords_array: [keyword])
   end
 
+  def self.keywords(keywords)
+    where.overlap(keywords_array: keywords)
+  end
+
   def self.language(language)
     where('lower(projects.language) = ?', language.try(:downcase))
   end
@@ -321,7 +332,7 @@ class Project < ActiveRecord::Base
   end
 
   def self.popular(options = {})
-    search('*', options.merge(sort: 'rank', order: 'desc')).records.includes(:github_repository).reject{|p| p.github_repository.nil? }
+    search('*', options.merge(sort: 'rank', order: 'desc')).records.includes(:github_repository, :versions).reject{|p| p.github_repository.nil? }
   end
 
   def normalized_licenses
