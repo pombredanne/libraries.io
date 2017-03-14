@@ -1,6 +1,6 @@
 <div class="row">
   <div class="col-md-12">
-    <h2>GitHub Repository Monitoring</h2>
+    <h2>Repository Monitoring</h2>
     <br>
   </div>
 </div>
@@ -63,32 +63,32 @@
             </small>
           </th>
         </thead>
-        <% @repos.each do |github_repository| %>
+        <% @repos.each do |repository| %>
           <tr>
             <td>
-                <%= link_to image_tag(github_repository.avatar_url(40), width: 20, height: 20), github_repository_path(github_repository.owner_name, github_repository.project_name) %>
+                <%= link_to image_tag(repository.avatar_url(40), width: 20, height: 20), repository_path(repository.to_param) %>
                 <strong>
-                  <%= link_to github_repository.full_name, github_repository_path(github_repository.owner_name, github_repository.project_name) %>
+                  <%= link_to repository.full_name, repository_path(repository.to_param) %>
                 </strong>
                 <small>
-                  <%= fa_icon("lock") if github_repository.private? %>
-                  <%= fa_icon("code-fork") if github_repository.fork? %>
+                  <%= fa_icon("lock") if repository.private? %>
+                  <%= fa_icon("code-fork") if repository.fork? %>
                 </small>
             </td>
             <td>
-              <small><%= pluralize(github_repository.repository_dependencies.count, 'dependencies') %></small>
+              <small><%= pluralize(repository.repository_dependencies.count, 'dependencies') %></small>
             </td>
             <td>
-              <% if sub = current_user.subscribed_to_repo?(github_repository) %>
+              <% if sub = current_user.subscribed_to_repo?(repository) %>
                 <div class="btn-group pull-right">
-                  <%= link_to unwatch_path(github_repository.id), method: :post, class: 'tip btn btn-sm btn-success', title: 'Stop watching' do %>
+                  <%= link_to unwatch_path(repository.id), method: :post, class: 'tip btn btn-sm btn-success', title: 'Stop watching' do %>
                     <%= fa_icon('check') %>
                     Monitoring
                   <% end %>
                   <%= link_to fa_icon('cog'), edit_repository_subscription_path(sub), class: 'btn btn-sm btn-success' %>
                 </div>
               <% else %>
-                <%= button_to watch_path(github_repository.id), method: :post, class: 'btn btn-sm btn-default  pull-right' do %>
+                <%= button_to watch_path(repository.id), method: :post, class: 'btn btn-sm btn-default  pull-right' do %>
                   <%= fa_icon('eye') %>
                   Monitor
                 <% end %>
@@ -101,20 +101,21 @@
       <%= will_paginate @repos, page_links: false %>
     </div>
     <div class="col-md-3">
+      <%= render 'adsense/sidebar' %>
       <h5>How does this work?</h5>
       <p>
         With the help of a webhook, Libraries.io can automatically keep track of all
-        of the libraries that your GitHub project depends upon across many different package managers.
+        of the libraries that your repositories depends upon across many different package managers.
       </p>
       <p>
         Once synced, Libraries.io will email you about new versions of your dependencies,
         if you add or remove a new dependency it will change the notifications settings for that library
-        as soon as you push to GitHub.
+        as soon as you push to your repositories.
       </p>
       <p><strong>Supported Package Managers:</strong></p>
-      <div class="">
-        <% Download.platforms.select{|p| p::LIBRARIAN_SUPPORT }.sort_by{|p| p.formatted_name.downcase }.each do |platform| %>
-          <div class="pictogram tip pictogram-<%= platform.formatted_name.downcase %>" title='<%= platform.formatted_name %>'></div>
+      <div>
+        <% PackageManager::Base.platforms.select{|p| p::BIBLIOTHECARY_SUPPORT }.sort_by{|p| p.formatted_name.downcase }.each do |platform| %>
+          <a class="pictogram tip pictogram-<%= platform.formatted_name.downcase %>" title='<%= platform.formatted_name %>'></a>
         <% end %>
       </div>
       <br>

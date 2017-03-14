@@ -6,11 +6,13 @@ class PlatformsController < ApplicationController
   def show
     find_platform
     scope = Project.platform(@platform_name).maintained
-    @created = scope.few_versions.order('projects.created_at DESC').limit(5).includes(:github_repository, :versions)
-    @updated = scope.many_versions.order('projects.latest_release_published_at DESC').limit(5).includes(:github_repository, :versions)
-    @watched = scope.most_watched.limit(5).includes(:github_repository, :versions)
-    @dependend = scope.most_dependents.limit(5).includes(:github_repository, :versions)
-    @popular = scope.order('projects.rank DESC').limit(5).includes(:github_repository, :versions)
+    @created = scope.few_versions.order('projects.created_at DESC').limit(5).includes(:repository)
+    @updated = scope.many_versions.order('projects.latest_release_published_at DESC').limit(5).includes(:repository)
+    @watched = scope.most_watched.limit(5).includes(:repository)
+    @dependend = scope.most_dependents.limit(5).includes(:repository)
+    @popular = scope.order('projects.rank DESC').limit(5).includes(:repository)
+    @trending = scope.includes(:repository).recently_created.hacker_news.limit(5)
+    @dependent_repos = scope.most_dependent_repos.limit(5).includes(:repository)
 
     @color = @platform.color
 

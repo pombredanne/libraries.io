@@ -1,0 +1,12 @@
+<%= render 'admin/nav' %>
+<% title 'Repo Stats - Libraries' %>
+<h1>
+  Repo Stats
+</h1>
+
+<div class="row">
+  <%= stats_for('Orgs', @new_orgs) %>
+  <%= stats_for('Readmes', @new_readmes) %>
+  <%= stats_for('Users', @new_users) %>
+  <%= stats_for('Manifests', @new_manifests) %>
+</div>

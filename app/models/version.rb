@@ -1,18 +1,26 @@
-class Version < ActiveRecord::Base
+class Version < ApplicationRecord
+  include Releaseable
+
   validates_presence_of :project_id, :number
   validates_uniqueness_of :number, scope: :project_id
 
-  belongs_to :project, touch: true
+  belongs_to :project
   counter_culture :project
   has_many :dependencies, dependent: :delete_all
 
   after_commit :send_notifications_async, on: :create
-  after_commit :update_github_repo_async, on: :create
+  after_commit :update_repository_async, on: :create
+  after_commit :save_project
 
   scope :newest_first, -> { order('versions.published_at DESC') }
 
   def as_json(options = nil)
     super({ only: [:number, :published_at] }.merge(options || {}))
+  end
+
+  def save_project
+    project.try(:forced_save)
+    project.try(:update_repository_async)
   end
 
   def platform
@@ -23,7 +31,7 @@ class Version < ActiveRecord::Base
     subscriptions = project.subscriptions
     subscriptions = subscriptions.include_prereleases if prerelease?
 
-    subscriptions.group_by(&:notification_user).each do |user, subscriptions|
+    subscriptions.group_by(&:notification_user).each do |user, _user_subscriptions|
       next if user.nil?
       next if user.muted?(project)
       next if !user.emails_enabled?
@@ -36,7 +44,7 @@ class Version < ActiveRecord::Base
   end
 
   def notify_web_hooks
-    repos = project.subscriptions.map(&:github_repository).compact.uniq
+    repos = project.subscriptions.map(&:repository).compact.uniq
     repos.each do |repo|
       requirements = repo.repository_dependencies.select{|rd| rd.project == project }.map(&:requirements)
       repo.web_hooks.each do |web_hook|
@@ -50,9 +58,9 @@ class Version < ActiveRecord::Base
     VersionNotificationsWorker.perform_async(self.id)
   end
 
-  def update_github_repo_async
-    return unless project.github_repository
-    GithubDownloadWorker.perform_async(project.github_repository_id)
+  def update_repository_async
+    return unless project.repository_id.present?
+    RepositoryDownloadWorker.perform_async(project.repository_id)
   end
 
   def send_notifications
@@ -62,7 +70,7 @@ class Version < ActiveRecord::Base
   end
 
   def published_at
-    read_attribute(:published_at).presence || created_at
+    @published_at ||= read_attribute(:published_at).presence || created_at
   end
 
   def <=>(other)
@@ -71,22 +79,6 @@ class Version < ActiveRecord::Base
     else
       other.parsed_number <=> parsed_number
     end
-  end
-
-  def parsed_number
-    semantic_version || number
-  end
-
-  def semantic_version
-    @semantic_version ||= begin
-      Semantic::Version.new(number)
-    rescue ArgumentError
-      nil
-    end
-  end
-
-  def stable?
-    !prerelease?
   end
 
   def prerelease?
@@ -99,36 +91,15 @@ class Version < ActiveRecord::Base
     end
   end
 
-  def valid_number?
-    !!semantic_version
-  end
-
-  def follows_semver_for_dependency_requirements?
-    dependencies.all?(&:valid_requirements?)
-  end
-
-  def follows_semver?
-    valid_number? && follows_semver_for_dependency_requirements?
-  end
-
   def any_outdated_dependencies?
-    dependencies.any?(&:outdated?)
-  end
-
-  def greater_than_1?
-    return nil unless follows_semver?
-    begin
-      SemanticRange.gte(number, '1.0.0')
-    rescue
-      false
-    end
+    @any_outdated_dependencies ||= dependencies.kind('runtime').any?(&:outdated?)
   end
 
   def to_param
     project.to_param.merge(number: number)
   end
 
-  def to_s
-    number
+  def load_dependencies_tree(kind, date = nil)
+    TreeResolver.new(self, kind, date).load_dependencies_tree
   end
 end

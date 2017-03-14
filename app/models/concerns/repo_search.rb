@@ -3,7 +3,9 @@ module RepoSearch
 
   included do
     include Elasticsearch::Model
-    include Elasticsearch::Model::Callbacks
+
+    index_name    "github_repositories"
+    document_type "github_repository"
 
     FIELDS = ['full_name^2', 'exact_name^2', 'description', 'homepage', 'language', 'license']
 
@@ -18,6 +20,7 @@ module RepoSearch
         indexes :license, :index => :not_analyzed
         indexes :keywords, :index => :not_analyzed
         indexes :platforms, :index => :not_analyzed
+        indexes :host_type, :index => :not_analyzed
 
         indexes :status, :index => :not_analyzed
         indexes :default_branch, :index => :not_analyzed
@@ -41,8 +44,11 @@ module RepoSearch
         indexes :forks_count, type: 'integer'
         indexes :open_issues_count, type: 'integer'
         indexes :subscribers_count, type: 'integer'
-        indexes :github_id, type: 'integer'
+        indexes :github_id, type: 'string'
+        indexes :uuid, type: 'string'
         indexes :github_contributions_count, type: 'integer'
+        indexes :contributions_count, type: 'integer'
+        indexes :rank, type: 'integer'
 
         indexes :fork
         indexes :has_issues
@@ -52,10 +58,21 @@ module RepoSearch
       end
     end
 
-    after_save() { __elasticsearch__.index_document }
+    after_save lambda { __elasticsearch__.index_document }
+    after_commit lambda { __elasticsearch__.delete_document rescue nil },  on: :destroy
 
-    def as_indexed_json(options = {})
-      as_json methods: [:exact_name, :keywords, :platforms]
+    def self.facets(options = {})
+      Rails.cache.fetch "repo_facet:#{options.to_s.gsub(/\W/, '')}", :expires_in => 1.hour, race_condition_ttl: 2.minutes do
+        search('', options).response.facets
+      end
+    end
+
+    def as_indexed_json(_options)
+      as_json methods: [:exact_name, :keywords, :platforms, :github_id, :github_contributions_count, :rank]
+    end
+
+    def rank
+      read_attribute(:rank) || 0
     end
 
     def exact_name
@@ -63,17 +80,20 @@ module RepoSearch
     end
 
     def keywords
+      (project_keywords + readme_keywords).uniq.first(10)
+    end
+
+    def project_keywords
       projects.map(&:keywords_array).flatten.compact.uniq(&:downcase)
+    end
+
+    def readme_keywords
+      return [] unless readme.present?
+      readme.keywords
     end
 
     def platforms
       projects.map(&:platform).compact.uniq(&:downcase)
-    end
-
-    def self.total
-      Rails.cache.fetch 'github_repositories:total', :expires_in => 1.hour, race_condition_ttl: 2.minutes do
-        __elasticsearch__.client.count(index: 'github_repositories')["count"]
-      end
     end
 
     def self.search(query, options = {})
@@ -89,13 +109,7 @@ module RepoSearch
                  query: {match_all: {}},
                  filter:{
                    bool: {
-                     must: [
-                       {
-                         exists: {
-                           "field" => "pushed_at"
-                         }
-                       }
-                     ],
+                     must: [],
                      must_not: [
                        {
                          term: {
@@ -118,44 +132,16 @@ module RepoSearch
               }
             },
             field_value_factor: {
-              field: "stargazers_count",
+              field: "rank",
               "modifier": "square"
             }
           }
         },
         facets: {
-          language: { terms: {
-              field: "language",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: Project.filter_format(options[:filters], :language)
-              }
-            }
-          },
-          license: {
-            terms: {
-              field: "license",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: Project.filter_format(options[:filters], :license)
-              }
-            }
-          },
-          keywords: {
-            terms: {
-              field: "keywords",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: Project.filter_format(options[:filters], :keywords)
-              }
-            }
-          }
+          language: Project.facet_filter(:language, facet_limit, options),
+          license: Project.facet_filter(:license, facet_limit, options),
+          keywords: Project.facet_filter(:keywords, facet_limit, options),
+          host_type: Project.facet_filter(:host_type, facet_limit, options)
         },
         filter: {
           bool: {
@@ -178,23 +164,9 @@ module RepoSearch
       search_definition[:filter][:bool][:must] = Project.filter_format(options[:filters])
 
       if query.present?
-        search_definition[:query][:function_score][:query][:filtered][:query] = {
-          bool: {
-            should: [
-              { multi_match: {
-                  query: query,
-                  fields: FIELDS,
-                  fuzziness: 1.2,
-                  slop: 2,
-                  type: 'cross_fields',
-                  operator: 'and'
-                }
-              }
-            ]
-          }
-        }
+        search_definition[:query][:function_score][:query][:filtered][:query] = Project.query_options(query, FIELDS)
       elsif options[:sort].blank?
-        search_definition[:sort]  = [{'stargazers_count' => 'desc'}]
+        search_definition[:sort]  = [{'rank' => 'desc'}, {'stargazers_count' => 'desc'}]
       end
 
       __elasticsearch__.search(search_definition)

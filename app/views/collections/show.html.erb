@@ -1,0 +1,21 @@
+<% title "#{params[:keywords]}  #{params[:keyword]} libraries written in #{@language} - Libraries.io" %>
+<% description "Find popular and trending #{params[:keywords]} #{params[:keyword]} libraries written in #{@language}" %>
+
+<h1>
+  <div class="pictogram pictogram-lg pictogram-<%= @language.downcase %>"></div>
+  <%= params[:keywords] %> <%= params[:keyword] %> libraries written in <%= @language %>
+</h1>
+
+<div class="col-sm-8">
+  <%= render 'adsense/banner' %>
+  <%= render @projects, cache: true %>
+  <%= will_paginate @search %>
+</div>
+<div class='col-sm-4 facets'>
+  <%= render 'adsense/sidebar' %>
+  <% @search.response.facets.each do |name, facet| %>
+    <% next if facet['terms'].empty? %>
+    <% next if name == 'languages' %>
+    <%= render 'search/facet', name: name, facet: facet %>
+  <% end %>
+</div>

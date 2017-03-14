@@ -7,7 +7,7 @@ class AccountsController < ApplicationController
 
   def update
     if current_user.update_attributes(user_params)
-      redirect_to account_path, notice: 'Email updated'
+      redirect_to account_path, notice: 'Preferences updated'
     else
       flash.now[:error] = "Couldn't update your email address"
       render action: :show
@@ -21,9 +21,15 @@ class AccountsController < ApplicationController
     redirect_to root_path
   end
 
+  def disable_emails
+    current_user.update_attributes(emails_enabled: false)
+    flash[:notice] = "All Libraries.io Emails to your account have been disabled"
+    redirect_back(fallback_location: root_path)
+  end
+
   private
 
   def user_params
-    params.require(:user).permit(:email, :emails_enabled)
+    params.require(:user).permit(:email, :emails_enabled, :hidden)
   end
 end

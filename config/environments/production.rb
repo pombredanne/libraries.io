@@ -22,8 +22,8 @@ Rails.application.configure do
 
   # Disable serving static files from the `/public` folder by default since
   # Apache or NGINX already handles this.
-  config.serve_static_files = ENV['RAILS_SERVE_STATIC_FILES'].present?
-  config.static_cache_control = "public, max-age=2592000"
+  config.public_file_server.enabled = ENV['RAILS_SERVE_STATIC_FILES'].present?
+  config.public_file_server.headers = { 'Cache-Control' => 'public, max-age=2592000' }
 
   # Compress JavaScripts and CSS.
   config.assets.js_compressor = :uglifier
@@ -86,12 +86,12 @@ Rails.application.configure do
                      :password => ENV["MEMCACHIER_PASSWORD"],
                      :failover => true,
                      :compress => true,
-                     :socket_timeout => 1.5,
-                     :socket_failure_delay => 0.2
+                     :socket_timeout => 0.5,
+                     :socket_failure_delay => 0.1
                     }
   config.action_mailer.smtp_settings = {
     address:              'smtp.sendgrid.net',
-    port:                 '587',
+    port:                 '2525',
     authentication:       :plain,
     user_name:            ENV['SENDGRID_USERNAME'],
     password:             ENV['SENDGRID_PASSWORD'],
@@ -101,4 +101,10 @@ Rails.application.configure do
   config.action_mailer.delivery_method = :smtp
 
   config.lograge.enabled = true
+
+  if ENV["RAILS_LOG_TO_STDOUT"].present?
+    logger           = ActiveSupport::Logger.new(STDOUT)
+    logger.formatter = config.log_formatter
+    config.logger = ActiveSupport::TaggedLogging.new(logger)
+  end
 end

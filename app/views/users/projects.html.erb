@@ -1,12 +1,13 @@
-<% title "Projects referencing #{@user}'s GitHub Repositories - Libraries" %>
+<% title "Projects referencing #{@user}'s Repositories - Libraries.io" %>
 
 <h1>
   <%= image_tag @user.avatar_url(120), width: 60, height: 60, alt: @user %>
-  Projects referencing <%= link_to @user, user_path(@user) %>'s GitHub Repositories
+  Projects referencing <%= link_to @user, user_path(@user) %>'s Repositories
 </h1>
 <hr>
 <div class="row">
-  <div class="col-md-8">
+  <div class="col-sm-8">
+    <%= render 'adsense/banner' %>
     <% if @projects.any? %>
       <%= render @projects, cache: true  %>
       <%= will_paginate @projects, page_links: false %>
@@ -16,14 +17,15 @@
       </p>
     <% end %>
   </div>
-  <div class="col-md-4">
+  <div class="col-sm-4">
+    <%= render 'adsense/sidebar' %>
     <h3>
       <strong>
         Where do these come from?
       </strong>
     </h3>
     <p>
-      This is a list of every project published to a package manager that references one of <%= link_to @user, user_path(@user) %>'s GitHub repositories as it's source.
+      This is a list of every project published to a package manager that references one of <%= link_to @user, user_path(@user) %>'s repositories as it's source.
     </p>
   </div>
 </div>

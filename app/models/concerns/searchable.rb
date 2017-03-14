@@ -3,7 +3,6 @@ module Searchable
 
   included do
     include Elasticsearch::Model
-    include Elasticsearch::Model::Callbacks
 
     FIELDS = ['name^2', 'exact_name^2', 'repo_name', 'description', 'homepage', 'language', 'keywords_array', 'normalized_licenses', 'platform']
 
@@ -32,15 +31,21 @@ module Searchable
         indexes :stars, type: 'integer'
         indexes :versions_count, type: 'integer'
         indexes :dependents_count, type: 'integer'
-        indexes :github_repository_id, type: 'integer'
-        indexes :github_contributions_count, type: 'integer'
+        indexes :dependent_repos_count, type: 'integer'
+        indexes :repository_id, type: 'integer'
+        indexes :contributions_count, type: 'integer'
       end
     end
 
-    after_save() { __elasticsearch__.index_document }
+    after_save lambda { __elasticsearch__.index_document  }
+    after_commit lambda { __elasticsearch__.delete_document rescue nil },  on: :destroy
 
-    def as_indexed_json(options = {})
-      as_json methods: [:stars, :repo_name, :exact_name, :github_contributions_count, :pushed_at]
+    def as_indexed_json(_options)
+      as_json methods: [:stars, :repo_name, :exact_name, :contributions_count, :pushed_at, :dependent_repos_count]
+    end
+
+    def dependent_repos_count
+      read_attribute(:dependent_repos_count) || 0
     end
 
     def exact_name
@@ -48,51 +53,19 @@ module Searchable
     end
 
     def pushed_at
-      github_repository.try(:pushed_at)
+      repository.try(:pushed_at)
     end
 
-    def self.total
-      Rails.cache.fetch 'projects:total', :expires_in => 1.hour, race_condition_ttl: 2.minutes do
-        __elasticsearch__.client.count(index: 'projects')["count"]
-      end
-    end
-
-    def self.bus_factor_search(options = {})
+    def self.cta_search(filters, options = {})
       facet_limit = options.fetch(:facet_limit, 35)
-      query = sanitize_query(query)
       options[:filters] ||= []
       search_definition = {
         query: {
           function_score: {
             query: {
               filtered: {
-                 query: {match_all: {}},
-                 filter:{
-                   bool: {
-                     must: [
-                      {
-                        range: {
-                          github_contributions_count: {
-                            lte: 5,
-                            gte: 1
-                          }
-                        }
-                      }
-                     ],
-                     must_not: [
-                       {
-                         term: {
-                           "status" => "Removed"
-                         },
-                       },
-                       {
-                         term: {
-                           "status" => "Unmaintained"
-                         }
-                       }
-                     ]
-                  }
-                }
+                query: { match_all: {} },
+                filter:{ bool: filters }
               }
             },
             field_value_factor: {
@@ -101,108 +74,82 @@ module Searchable
             }
           }
         },
-        facets: {
-          language: { terms: {
-              field: "language",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :language)
-              }
-            }
-          },
-          licenses: {
-            terms: {
-              field: "normalized_licenses",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :normalized_licenses)
-              }
-            }
-          }
-        },
-        filter: {
-          bool: {
-            must: []
-          }
-        }
+        facets: facets_options(facet_limit, options),
+        filter: { bool: { must: [] } }
       }
       search_definition[:filter][:bool][:must] = filter_format(options[:filters])
-      search_definition[:sort]  = [{'github_contributions_count' => 'asc'}, {'rank' => 'desc'}]
+      search_definition[:sort]  = [{'contributions_count' => 'asc'}, {'rank' => 'desc'}]
       __elasticsearch__.search(search_definition)
     end
 
+    def self.bus_factor_search(options = {})
+      cta_search({
+        must: [
+          { range: { contributions_count: { lte: 5, gte: 1 } } }
+        ],
+        must_not: [
+          { term: { "status" => "Removed" } },
+          { term: { "status" => "Unmaintained" } }
+        ]
+      }, options)
+    end
+
     def self.unlicensed_search(options = {})
-      facet_limit = options.fetch(:facet_limit, 35)
-      query = sanitize_query(query)
-      options[:filters] ||= []
-      search_definition = {
-        query: {
-          function_score: {
-            query: {
-              filtered: {
-                 query: {match_all: {}},
-                 filter:{
-                   bool: {
-                     must_not: [
-                       {
-                         exists: {
-                           field: "normalized_licenses"
-                         },
-                       },
-                       {
-                         term: {
-                           "status" => "Removed"
-                         },
-                       },
-                       {
-                         term: {
-                           "status" => "Unmaintained"
-                         }
-                       }
-                     ]
-                  }
-                }
-              }
-            },
-            field_value_factor: {
-              field: "rank",
-              "modifier": "square"
-            }
-          }
-        },
-        facets: {
-          language: { terms: {
-              field: "language",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :language)
-              }
-            }
+      cta_search({
+        must_not: [
+          { exists: { field: "normalized_licenses" } },
+          { term: { "status" => "Removed" } },
+          { term: { "status" => "Unmaintained" } }
+        ]
+      }, options)
+    end
+
+    def self.facets_options(facet_limit, options)
+      {
+        language: { terms: {
+            field: "language",
+            size: facet_limit
           },
-          platforms: { terms: {
-            field: "platform",
-            size: facet_limit},
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :platform)
-              }
+          facet_filter: {
+            bool: {
+              must: filter_format(options[:filters], :language)
             }
           }
         },
-        filter: {
-          bool: {
-            must: []
+        licenses: {
+          terms: {
+            field: "normalized_licenses",
+            size: facet_limit
+          },
+          facet_filter: {
+            bool: {
+              must: filter_format(options[:filters], :normalized_licenses)
+            }
           }
         }
       }
-      search_definition[:filter][:bool][:must] = filter_format(options[:filters])
-      search_definition[:sort]  = [{'github_contributions_count' => 'asc'}, {'rank' => 'desc'}]
+    end
+
+    def self.lookup_multiple(platform, names)
+      search_definition = {
+        query: {
+          filtered: {
+             query: {match_all: {}},
+             filter:{
+               bool: {
+                 must: [
+                   {
+                     term: { "platform" => platform }
+                   }
+                 ],
+                 should: names.map do |name|
+                   { term: { "exact_name": name } }
+                 end
+              }
+            }
+          }
+        }
+      }
       __elasticsearch__.search(search_definition)
     end
 
@@ -235,53 +182,12 @@ module Searchable
           }
         },
         facets: {
-          platforms: { terms: {
-            field: "platform",
-            size: facet_limit},
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :platform)
-              }
-            }
-          },
-          languages: { terms: {
-              field: "language",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :language)
-              }
-            }
-          },
-          keywords: {
-            terms: {
-              field: "keywords_array",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :keywords_array)
-              }
-            }
-          },
-          licenses: {
-            terms: {
-              field: "normalized_licenses",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :normalized_licenses)
-              }
-            }
-          }
+          platforms: facet_filter(:platform, facet_limit, options),
+          languages: facet_filter(:language, facet_limit, options),
+          keywords: facet_filter(:keywords_array, facet_limit, options),
+          licenses: facet_filter(:normalized_licenses, facet_limit, options)
         },
-        filter: {
-          bool: {
-            must: []
-          }
-        },
+        filter: { bool: { must: [] } },
         suggest: {
           did_you_mean: {
             text: query,
@@ -297,21 +203,7 @@ module Searchable
       search_definition[:filter][:bool][:must] = filter_format(options[:filters])
 
       if query.present?
-        search_definition[:query][:function_score][:query][:filtered][:query] = {
-          bool: {
-            should: [
-              { multi_match: {
-                  query: query,
-                  fields: FIELDS,
-                  fuzziness: 1.2,
-                  slop: 2,
-                  type: 'cross_fields',
-                  operator: 'and'
-                }
-              }
-            ]
-          }
-        }
+        search_definition[:query][:function_score][:query][:filtered][:query] = query_options(query, FIELDS)
       elsif options[:sort].blank?
         search_definition[:sort]  = [{'rank' => 'desc'}, {'stars' => 'desc'}]
       end
@@ -326,13 +218,28 @@ module Searchable
       __elasticsearch__.search(search_definition)
     end
 
+    def self.query_options(query, fields)
+      {
+        bool: {
+          should: [
+            {
+              multi_match: {
+                query: query,
+                fields: fields,
+                fuzziness: 1.2,
+                slop: 2,
+                type: 'cross_fields',
+                operator: 'and'
+              }
+            }
+          ]
+        }
+      }
+    end
+
     def self.filter_format(filters, except = nil)
       filters.select { |k, v| v.present? && k != except }.map do |k, v|
-        Array(v).map do |value|
-          {
-            terms: { k => v.split(',') }
-          }
-        end
+        Array(v).map { { terms: { k => v.split(',') } } }
       end
     end
 
@@ -355,6 +262,20 @@ module Searchable
       str = str.gsub(/(.*)"(.*)/, '\1\"\3') if quote_count % 2 == 1
 
       str
+    end
+
+    def self.facet_filter(name, limit, options)
+      {
+        terms: {
+          field: name.to_s,
+          size: limit
+        },
+        facet_filter: {
+          bool: {
+            must: filter_format(options[:filters], name.to_sym)
+          }
+        }
+      }
     end
   end
 end

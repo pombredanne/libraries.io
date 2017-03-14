@@ -1,5 +1,5 @@
-class WebHook < ActiveRecord::Base
-  belongs_to :github_repository
+class WebHook < ApplicationRecord
+  belongs_to :repository
   belongs_to :user
   validates_presence_of :url
   validates :url, :format => URI::regexp(%w(http https))
@@ -20,12 +20,12 @@ class WebHook < ActiveRecord::Base
   def send_new_version(project, platform, version_or_tag, requirements = [])
     send_payload({
       event: 'new_version',
-      repository: github_repository.full_name,
+      repository: repository.full_name,
       platform: platform,
       name: project.name,
       version: version_or_tag.number,
-      default_branch: github_repository.default_branch,
-      package_manager_url: Repositories::Base.package_link(project, version_or_tag),
+      default_branch: repository.default_branch,
+      package_manager_url: project.package_manager_url(version_or_tag.number),
       published_at: version_or_tag.published_at,
       requirements: requirements,
       project: project.as_json(only: [:name, :platform, :description,  :homepage, :language, :repository_url, :stars, :latest_release_published_at, :normalized_licenses])
@@ -36,7 +36,7 @@ class WebHook < ActiveRecord::Base
     Typhoeus::Request.new(url,
       method: :post,
       timeout_ms: 10000,
-      body: Oj.dump(data, mode: :compat),
+      body: JSON.dump(data),
       headers: { 'Content-Type' => 'application/json', 'Accept-Encoding' => 'application/json' })
   end
 

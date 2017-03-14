@@ -1,7 +1,17 @@
-<% title "Languages - Libraries" %>
+<% title "Languages - Libraries.io" %>
 <% description "All the programming languages that projects have been written in." %>
-<h1>Languages</h1>
+<h1>
+  <%= fa_icon 'code' %>
+  Languages
+</h1>
 <hr>
 <div class='row'>
-  <%= render partial: 'language', collection: @languages %>
+  <div class="col-md-8">
+    <div class="row">
+      <%= render partial: 'language', collection: @languages %>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <%= render 'adsense/sidebar' %>
+  </div>
 </div>

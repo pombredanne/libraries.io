@@ -1,6 +1,17 @@
-<% title "Keywords - Libraries" %>
+<% title "Keywords - Libraries.io" %>
 <% description "All the Keywords that projects have been tagged with" %>
-<h1>Keywords</h1><hr>
+<h1>
+  <%= fa_icon 'tags' %>
+  Keywords
+</h1>
+<hr>
 <div class='row'>
-  <%= render partial: 'keyword', collection: @keywords %>
+  <div class="col-md-8">
+    <div class="row">
+      <%= render partial: 'keyword', collection: @keywords %>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <%= render 'adsense/sidebar' %>
+  </div>
 </div>

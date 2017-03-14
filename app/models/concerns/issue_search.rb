@@ -3,8 +3,9 @@ module IssueSearch
 
   included do
     include Elasticsearch::Model
-    include Elasticsearch::Model::Callbacks
 
+    index_name    "github_issues"
+    document_type "github_issue"
 
     FIELDS = ['title^2', 'body']
 
@@ -19,6 +20,8 @@ module IssueSearch
         indexes :stars, type: 'integer'
         indexes :github_id, type: 'integer'
         indexes :contributions_count, type: 'integer'
+        indexes :rank, type: 'integer'
+        indexes :comments_count, type: 'integer'
 
         indexes :language, :analyzer => 'keyword'
         indexes :license, :analyzer => 'keyword'
@@ -27,24 +30,21 @@ module IssueSearch
         indexes :locked
         indexes :labels, :analyzer => 'keyword'
         indexes :state, :analyzer => 'keyword'
-
       end
     end
 
-    after_save() { __elasticsearch__.index_document }
+    after_save lambda { __elasticsearch__.index_document  }
+    after_commit lambda { __elasticsearch__.delete_document rescue nil },  on: :destroy
 
-    def as_indexed_json(options = {})
-      as_json methods: [:title, :contributions_count, :stars, :language, :license]
+    def as_indexed_json(_options)
+      as_json methods: [:title, :contributions_count, :stars, :language, :license, :rank]
     end
 
     def exact_title
       full_title
     end
 
-    def self.search(query, options = {})
-      facet_limit = options.fetch(:facet_limit, 35)
-
-      query = Project.sanitize_query(query)
+    def self.search(options = {})
       options[:filters] ||= []
       options[:must_not] ||= []
 
@@ -56,255 +56,106 @@ module IssueSearch
                  query: {match_all: {}},
                  filter: {
                    bool: {
-                     must: [
-                        { "term": { "state": "open"}},
-                        { "term": { "locked": false}}
-                     ],
-                     must_not: [
-                       {
-                         term: {
-                          "labels": "wontfix"
-                         }
-                       }
-                     ]
+                     must: [ { "term": { "state": "open"}}, { "term": { "locked": false}} ],
+                     must_not: [ { term: { "labels": "wontfix" } } ],
                    }
                  }
               }
             },
-            field_value_factor: {
-              field: "stars",
-              "modifier": "square"
-            }
+            field_value_factor: { field: "rank", "modifier": "square" }
           }
         },
-        facets: {
-          language: { terms: {
-              field: "language",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :language)
-              }
-            }
-          },
-          labels: {
-            terms: {
-              field: "labels",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: label_filter_format(options[:filters], options[:labels_to_keep])
-              }
-            }
-          },
-          license: {
-            terms: {
-              field: "license",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :license)
-              }
-            }
-          }
-        },
-        filter: {
-          bool: {
-            must: [],
-            must_not: options[:must_not]
-          }
-        },
-        suggest: {
-          did_you_mean: {
-            text: query,
-            term: {
-              size: 1,
-              field: "full_name"
-            }
-          }
-        }
+        facets: issues_facet_filters(options, options[:labels_to_keep]),
+        filter: { bool: { must: [], must_not: options[:must_not] } }
       }
       search_definition[:track_scores] = true
-
-      if query.present?
-        search_definition[:query][:function_score][:query][:filtered][:query] = {
-          bool: {
-            should: [
-              { multi_match: {
-                  query: query,
-                  fields: FIELDS,
-                  fuzziness: 1.2,
-                  slop: 2,
-                  type: 'cross_fields',
-                  operator: 'and'
-                }
-              }
-            ]
-          }
-        }
-      elsif options[:sort].blank?
-        search_definition[:sort]  = [{'comments_count' => 'asc'},
-                                     {'stars' => 'desc'},
-                                     {'created_at' => 'asc'},
-                                     {'contributions_count' => 'asc'}]
-      end
+      search_definition[:sort] = default_sort if options[:sort].blank?
       search_definition[:filter][:bool][:must] = filter_format(options[:filters])
-      __elasticsearch__.search(search_definition)
-    end
-
-    def self.first_pr_search(query, options = {})
-      facet_limit = options.fetch(:facet_limit, 35)
-
-      query = Project.sanitize_query(query)
-      options[:filters] ||= []
-      options[:must_not] ||= []
-
-      search_definition = {
-        query: {
-          function_score: {
-            query: {
-              filtered: {
-                 query: {match_all: {}},
-                 filter: {
-                   bool: {
-                     must: [
-                        { "term": { "state": "open"}},
-                        { "term": { "locked": false}}
-                     ],
-                     must_not: [
-                       {
-                         term: {
-                          "labels": "wontfix"
-                         }
-                       }
-                     ],
-                     should: GithubIssue::FIRST_PR_LABELS.map do |label|
-                       {
-                         term: {
-                          "labels": label
-                         }
-                       }
-                     end
-                   }
-                 }
-              }
-            },
-            field_value_factor: {
-              field: "stars",
-              "modifier": "square"
-            }
-          }
-        },
-        facets: {
-          language: { terms: {
-              field: "language",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :language)
-              }
-            }
-          },
-          labels: {
-            terms: {
-              field: "labels",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: label_filter_format(options[:filters], GithubIssue::FIRST_PR_LABELS)
-              }
-            }
-          },
-          license: {
-            terms: {
-              field: "license",
-              size: facet_limit
-            },
-            facet_filter: {
-              bool: {
-                must: filter_format(options[:filters], :license)
-              }
-            }
-          }
-        },
-        filter: {
-          bool: {
-            must: [],
-            must_not: options[:must_not]
-          }
-        },
-        suggest: {
-          did_you_mean: {
-            text: query,
-            term: {
-              size: 1,
-              field: "full_name"
-            }
-          }
-        }
-      }
-      search_definition[:track_scores] = true
-
-      if query.present?
-        search_definition[:query][:function_score][:query][:filtered][:query] = {
-          bool: {
-            should: [
-              { multi_match: {
-                  query: query,
-                  fields: FIELDS,
-                  fuzziness: 1.2,
-                  slop: 2,
-                  type: 'cross_fields',
-                  operator: 'and'
-                }
-              }
-            ]
-          }
-        }
-      elsif options[:sort].blank?
-        search_definition[:sort]  = [{'comments_count' => 'asc'},
-                                     {'stars' => 'desc'},
-                                     {'created_at' => 'asc'},
-                                     {'contributions_count' => 'asc'}]
+      if options[:repo_ids].present?
+        search_definition[:query][:function_score][:query][:filtered][:filter][:bool][:must] << {
+          terms: { "repository_id": options[:repo_ids] } }
       end
-      search_definition[:filter][:bool][:must] = filter_format(options[:filters])
       __elasticsearch__.search(search_definition)
     end
 
     def self.filter_format(filters, except = nil)
       filters.select { |k, v| v.present? && k != except }.map do |k, v|
         if v.is_a?(Array)
-          v.map do |value|
-            {
-              term: { k => value }
-            }
-          end
+          v.map { |value| { term: { k => value } } }
         else
-          {
-            term: { k => v }
-          }
+          { term: { k => v } }
         end
       end.flatten
     end
 
+    def self.first_pr_search(options = {})
+      options[:filters] ||= []
+      options[:must_not] ||= []
+
+      search_definition = {
+        query: {
+          function_score: {
+            query: {
+              filtered: {
+                 query: {match_all: {}},
+                 filter: {
+                   bool: {
+                     must: [ { "term": { "state": "open"}}, { "term": { "locked": false}} ],
+                     must_not: [ { term: { "labels": "wontfix" } } ],
+                     should: Issue::FIRST_PR_LABELS.map do |label|
+                       { term: { "labels": label } }
+                     end
+                   }
+                 }
+              }
+            },
+            field_value_factor: { field: "rank", "modifier": "square" }
+          }
+        },
+        facets: issues_facet_filters(options, Issue::FIRST_PR_LABELS),
+        filter: { bool: { must: [], must_not: options[:must_not] } }
+      }
+      search_definition[:track_scores] = true
+      search_definition[:sort] = default_sort if options[:sort].blank?
+      search_definition[:filter][:bool][:must] = filter_format(options[:filters])
+      __elasticsearch__.search(search_definition)
+    end
+
+    def self.default_sort
+      [{'comments_count' => 'asc'}, {'rank' => 'desc'}, {'created_at' => 'asc'}, {'contributions_count' => 'asc'}]
+    end
+
+    def self.issues_facet_filters(options, labels)
+      facet_limit = options.fetch(:facet_limit, 35)
+      {
+        language: {
+          terms: { field: "language", size: facet_limit },
+          facet_filter: {
+            bool: { must: filter_format(options[:filters], :language) }
+          }
+        },
+        labels: {
+          terms: { field: "labels", size: facet_limit },
+          facet_filter: {
+            bool: { must: label_filter_format(options[:filters], labels) }
+          }
+        },
+        license: {
+          terms: { field: "license", size: facet_limit },
+          facet_filter: {
+            bool: { must: filter_format(options[:filters], :license) }
+          }
+        }
+      }
+    end
+
     def self.label_filter_format(filters, labels_to_keep = ['help wanted'])
       labels_to_keep ||= ['help wanted']
-      filters.select { |k, v| v.present? }.map do |k, v|
+      filters.select { |_k, v| v.present? }.map do |k, v|
         if k == :labels
-          labels_to_keep.map do |value|
-            {
-              term: { k => value }
-            }
-          end
+          labels_to_keep.map { |value| { term: { k => value } } }
         else
-          {
-            term: { k => v }
-          }
+          { term: { k => v } }
         end
       end
     end

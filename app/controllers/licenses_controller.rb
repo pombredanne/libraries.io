@@ -6,11 +6,12 @@ class LicensesController < ApplicationController
   def show
     find_license
     scope = Project.license(@license.id).maintained
-    @created = scope.few_versions.order('projects.created_at DESC').limit(5).includes(:github_repository, :versions)
-    @updated = scope.many_versions.order('projects.latest_release_published_at DESC').limit(5).includes(:github_repository, :versions)
-    @popular = scope.order('projects.rank DESC').limit(5).includes(:github_repository, :versions)
-    @watched = scope.most_watched.limit(5).includes(:github_repository, :versions)
-    @dependend = scope.most_dependents.limit(5).includes(:github_repository, :versions)
+    @created = scope.few_versions.order('projects.created_at DESC').limit(5).includes(:repository)
+    @updated = scope.many_versions.order('projects.latest_release_published_at DESC').limit(5).includes(:repository)
+    @popular = scope.order('projects.rank DESC').limit(5).includes(:repository)
+    @watched = scope.most_watched.limit(5).includes(:repository)
+    @dependend = scope.most_dependents.limit(5).includes(:repository)
+    @dependent_repos = scope.most_dependent_repos.limit(5).includes(:repository)
 
     facets = Project.facets(filters: {normalized_licenses: @license.id}, :facet_limit => 10)
 

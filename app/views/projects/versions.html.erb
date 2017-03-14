@@ -1,30 +1,38 @@
-<% title "#{@project} published releases on #{@project.platform_name} - Libraries" %>
+<% title "#{@project} published releases on #{@project.platform_name} - Libraries.io" %>
 <% content_for :atom, auto_discovery_link_tag(:atom, project_versions_url({format: "atom"}.merge(@project.to_param))) %>
 
 <h1>
   <%= link_to @project, project_path(@project.to_param) %> Releases
 </h1>
 <hr>
-<% if @versions.any? %>
-  <ul>
-    <% @versions.each do |version| %>
-    <li>
-      <%= link_to version, version_path(version.to_param) %>
-      <% if version.published_at.present? %>
-      - <%= version.published_at.to_s(:long) %>
-      <% end %>
-    </li>
+<div class="row">
+  <div class="col-sm-8">
+    <%= render 'adsense/banner' %>
+    <% if @versions.any? %>
+      <ul>
+        <% @versions.each do |version| %>
+        <li>
+          <%= link_to version, version_path(version.to_param) %>
+          <% if version.published_at.present? %>
+          - <%= version.published_at.to_s(:long) %>
+          <% end %>
+        </li>
+        <% end %>
+      </ul>
+      <%= will_paginate @versions, page_links: false %>
+      <p>
+        <%= link_to project_versions_path(@project.to_param.merge(format: :atom)) do %>
+          <%= fa_icon "rss-square" %>
+          Subscribe to an RSS feed of <%= @project %> releases
+        <% end %>
+      </p>
+    <% else %>
+      <p>
+        No releases found, go back to <%= link_to @project, project_path(@project.to_param) %>.
+      </p>
     <% end %>
-  </ul>
-  <%= will_paginate @versions, page_links: false %>
-  <p>
-    <%= link_to project_versions_path(@project.to_param.merge(format: :atom)) do %>
-      <%= fa_icon "rss-square" %>
-      Subscribe to an RSS feed of <%= @project %> releases
-    <% end %>
-  </p>
-<% else %>
-  <p>
-    No releases found, go back to <%= link_to @project, project_path(@project.to_param) %>.
-  </p>
-<% end %>
+  </div>
+  <div class="col-sm-4">
+    <%= render 'adsense/sidebar' %>
+  </div>
+</div>

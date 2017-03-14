@@ -12,7 +12,7 @@
 /db/*.sqlite3-journal
 
 # Ignore all logfiles and tempfiles.
-/log/*.log
+/log/*.log*
 /tmp
 .env
 
@@ -26,6 +26,7 @@ public/sitemap*
 Specs
 METADATA.jl
 inqlude-data
+swift-package-crawler-data
 
 node_modules
 

@@ -3,13 +3,36 @@ require 'uri'
 module ApplicationHelper
   include SanitizeUrl
 
+  def format_term(term)
+    format_host(platform_name(term)) || term
+  end
+
+  def format_host(host_type)
+    RepositoryHost::Base.format(host_type)
+  end
+
+  def format_facet_name(facet_name)
+    return 'Host' if facet_name == 'host_type'
+    facet_name.humanize
+  end
+
+  def platform_name(platform)
+    PackageManager::Base.platform_name(platform)
+  end
+
+  def colours
+    Languages::Language.all.map(&:color).compact.uniq.shuffle(random: Random.new(12))
+  end
+
   def sort_options
     [
       ['Relevance', nil],
       ['SourceRank', 'rank'],
-      ['GitHub Stars', 'stars'],
+      ['Stars', 'stars'],
       ['Dependents', 'dependents_count'],
+      ['Most Used', 'dependent_repos_count'],
       ['Latest Release', 'latest_release_published_at'],
+      ['Contributors', 'contributions_count'],
       ['Newest', 'created_at']
     ]
   end
@@ -17,97 +40,22 @@ module ApplicationHelper
   def repo_sort_options
     [
       ['Relevance', nil],
+      ['SourceRank', 'rank'],
       ['Stars', 'stargazers_count'],
       ['Forks', 'forks_count'],
       ['Watchers', 'subscribers_count'],
       ['Open issues', 'open_issues_count'],
-      ['Contributors', 'github_contributions_count'],
+      ['Contributors', 'contributions_count'],
       ['Repo size', 'size'],
       ['Newest', 'created_at'],
       ['Recently pushed', 'pushed_at']
     ]
   end
 
-  def package_link(project, version = nil)
-    Repositories::Base.package_link(project, version)
-  end
-
-  def download_url(name, platform, version = nil)
-    case platform
-    when 'Rubygems'
-      "https://rubygems.org/downloads/#{name}-#{version}.gem"
-    when 'Atom'
-      "https://www.atom.io/api/packages/#{name}/versions/#{version}/tarball"
-    when 'Cargo'
-      "https://crates.io/api/v1/crates/#{name}/#{version}/download"
-    when 'CRAN'
-      "https://cran.r-project.org/src/contrib/#{name}_#{version}.tar.gz"
-    when 'Emacs'
-      "http://melpa.org/packages/#{name}-#{version}.tar"
-    when 'Hackage'
-      "http://hackage.haskell.org/package/#{name}-#{version}/#{name}-#{version}.tar.gz"
-    end
-  end
-
-  def documentation_url(name, platform, version = nil)
-    case platform
-    when 'Rubygems'
-      "http://www.rubydoc.info/gems/#{name}/#{version}"
-    when 'Go'
-      "http://godoc.org/#{name}"
-    when 'Pub'
-      "http://www.dartdocs.org/documentation/#{name}/#{version}"
-    when 'CRAN'
-      "http://cran.r-project.org/web/packages/#{name}/#{name}.pdf"
-    when 'Hex'
-      "http://hexdocs.pm/#{name}/#{version}"
-    when 'CocoaPods'
-      "http://cocoadocs.org/docsets/#{name}/#{version}"
-    end
-  end
-
-  def install_instructions(project, platform, version = nil)
-    name = project.name
-    case platform
-    when 'Rubygems'
-      "gem install #{name}" + (version ? " -v #{version}" : "")
-    when 'NPM'
-      "npm install #{name}" + (version ? "@#{version}" : "")
-    when 'Jam'
-      "jam install #{name}" + (version ? "@#{version}" : "")
-    when 'Bower'
-      "bower install #{name}" + (version ? "##{version}" : "")
-    when 'Dub'
-      "dub fetch #{name}" + (version ? " --version #{version}" : "")
-    when 'Hackage'
-      "cabal install #{name}" + (version ? "-#{version}" : "")
-    when 'PyPi'
-      "pip install #{name}" + (version ? "==#{version}" : "")
-    when 'Atom'
-      "apm install #{name}" + (version ? "@#{version}" : "")
-    when 'Nimble'
-      "nimble install #{name}" + (version ? "@##{version}" : "")
-    when 'Go'
-      "go get #{name}"
-    when 'NuGet'
-      "Install-Package #{name}" + (version ? " -Version #{version}" : "")
-    when 'Meteor'
-      "meteor add #{name}" + (version ? "@=#{version}" : "")
-    when 'Elm'
-      "elm-package install #{name} #{version}"
-    when 'PlatformIO'
-      "platformio lib install #{project.pm_id}"
-    when 'Inqlude'
-      "inqlude install #{name}"
-    when 'Homebrew'
-      "brew install #{name}"
-    end
-  end
-
   def rss_url(project)
     if project.versions.size > 0
       project_versions_url({format: "atom"}.merge(project.to_param))
-    elsif project.github_repository && project.github_tags.length > 0
+    elsif project.repository && project.tags.length > 0
       project_tags_url({format: "atom"}.merge(project.to_param))
     end
   end
@@ -134,19 +82,8 @@ module ApplicationHelper
     keywords.compact.delete_if(&:empty?).map{|k| link_to k, "/keywords/#{k}" }.join(', ').html_safe
   end
 
-  def platform_name(platform)
-    if platform.downcase == 'npm'
-      return 'npm'
-    elsif platform.downcase == 'wordpress'
-      return 'WordPress'
-    else
-      return platform
-    end
-  end
-
-  def favicon(size)
-    libicon = "https://libicons.herokuapp.com/favicon.ico"
-    @color ? "#{libicon}?hex=#{URI::escape(@color)}&size=#{size}" : "/favicon-#{size}.png"
+  def linked_repo_keywords(keywords)
+    keywords.compact.delete_if(&:empty?).map{|k| link_to k, "/#{current_host}/search?keywords=#{k}" }.join(', ').html_safe
   end
 
   def format_license(license)
@@ -165,7 +102,8 @@ module ApplicationHelper
 
   def emojify(content)
     h(content).to_str.gsub(/:([\w+-]+):/) do |match|
-      if emoji = Emoji.find_by_alias($1)
+      emoji = Emoji.find_by_alias($1)
+      if emoji
         %(<img alt="#$1" src="#{image_path("emoji/#{emoji.image_filename}")}" style="vertical-align:middle" width="20" height="20" />)
       else
         match
@@ -182,36 +120,16 @@ module ApplicationHelper
     !bool && negative ? content_tag(:i, negative) : tag
   end
 
-  def dependency_platform(platform_string)
-    return platform_string if platform_string.nil?
-    case platform_string.downcase
-    when 'rubygemslockfile'
-      'rubygems'
-    when 'cocoapodslockfile'
-      'cocoapods'
-    when 'nugetlockfile', 'nuspec'
-      'nuget'
-    when 'packagistlockfile'
-      'packagist'
-    when 'gemspec'
-      'rubygems'
-    when 'npmshrinkwrap'
-      'npm'
+  def source_path(repository)
+    return nil unless repository.fork?
+    if repository.source.present?
+      repository_path(repository.source.to_param)
     else
-      platform_string.downcase
+      repository.source_url
     end
   end
 
-  def source_path(github_repository)
-    return nil unless github_repository.fork?
-    if github_repository.source.present?
-      github_repository_path(github_repository.source.owner_name, github_repository.source.project_name)
-    else
-      github_repository.source_url
-    end
-  end
-
-  def github_user_title(user)
+  def user_title(user)
     if user.name.present? && user.name.downcase != user.login.downcase
       "#{user.name} (#{user.login})"
     else
@@ -222,7 +140,8 @@ module ApplicationHelper
   def project_description(project, version)
     text = project.description || project.name
     text += " - #{version}" if version
-    text += " - a #{project.language} library on #{project.platform_name} - Libraries.io"
+    library_text = [project.language, "library"].compact.join(' ').with_indefinite_article
+    text + " - #{library_text} on #{project.platform_name} - Libraries.io"
   end
 
   def truncate_with_tip(text, length)
@@ -240,61 +159,7 @@ module ApplicationHelper
     unless options[:renderer]
       options = options.merge :renderer => BootstrapPagination::Rails
     end
-    super *[collection_or_options, options].compact
-  end
-
-  def source_rank_badge_class(value)
-    if value > 0
-      'alert-success'
-    elsif value < 0
-      'alert-danger'
-    else
-      'alert-warning'
-    end
-  end
-
-  def source_rank_titles
-    {
-      basic_info_present:         'Basic info present?',
-      repository_present:         'GitHub repository present?',
-      readme_present:             'Readme present?',
-      license_present:            'License present?',
-      versions_present:           'Has multiple versions?',
-      follows_semver:             'Follows SemVer?',
-      recent_release:             'Recent release?',
-      not_brand_new:              'Not brand new?',
-      is_deprecated:              'Deprecated?',
-      is_unmaintained:            'Unmaintained?',
-      is_removed:                 'Removed?',
-      any_outdated_dependencies:  'Outdated dependencies?',
-      one_point_oh:               '1.0.0 or greater?',
-      all_prereleases:            'Prerelease?',
-      github_stars:               'GitHub stars',
-      dependent_projects:         'Dependent Projects',
-      dependent_repositories:     'Dependent Repositories',
-      contributors:               'Contributors',
-      subscribers:                'Libraries.io subscribers'
-    }
-  end
-
-  def source_rank_explainations
-    {
-      basic_info_present:         'Description, homepage/repository link and keywords present?',
-      versions_present:           'Has the project had more than one release?',
-      follows_semver:             'Every version has a valid SemVer number',
-      recent_release:             'Within the past 6 months?',
-      not_brand_new:              'Existed for at least 6 months',
-      is_deprecated:              'Marked as deprecated by the maintainer',
-      is_unmaintained:            'Marked as unmaintained by the maintainer',
-      is_removed:                 'Removed from the package manager',
-      all_prereleases:            'All versions are prerelease',
-      any_outdated_dependencies:  'At least one dependency is behind the latest version',
-      github_stars:               'Logarithmic scale',
-      dependent_projects:         'Logarithmic scale times two',
-      dependent_repositories:     'Logarithmic scale',
-      contributors:               'Logarithmic scale divided by two',
-      subscribers:                'Logarithmic scale divided by two'
-    }
+    super(*[collection_or_options, options].compact)
   end
 
   def cp(path)
@@ -314,7 +179,7 @@ module ApplicationHelper
     {
       title: "Libraries - The Open Source Discovery Service",
       url: "https://libraries.io",
-      description: "Discover new modules and libraries you can use in your projects",
+      description: "Discover open source libraries, modules and frameworks you can use in your code",
       image: "https://libraries.io/apple-touch-icon-152x152.png",
       site_name: "Libraries.io",
       site_twitter: "@librariesio"
@@ -329,9 +194,9 @@ module ApplicationHelper
         url: project_url(record.to_param),
         image: shareable_image_url(record.platform)
       })
-    when 'GithubRepository'
+    when 'Repository'
       hash = record.meta_tags.merge({
-        url: github_repository_url(record.owner_name, record.project_name)
+        url: repository_url(record.to_param)
       })
     when 'GithubUser', 'GithubOrganisation'
       hash = record.meta_tags.merge({
@@ -343,15 +208,20 @@ module ApplicationHelper
     default_meta_tags.merge(hash)
   end
 
-  def featured_orgs
-    ['ebayinc','ibm','cloudant','microsoft', 'hmrc','dpspublishing', 'clearleft',
-     'google','thoughtworks','yelp','alphagov','nbcnews','openshift', 'ansible',
-     'heroku','github','thoughtbot','shopify','travis-ci','redhat-developer',
-     'mozilla','django','jenkinsci','the-economist-editorial','angular','emberjs',
-     'nearform','futurelearn','scaleway','producthunt','mysociety','sublimetext',
-     'codeforamerica','cdnjs','nodejs', 'simpleweb','mashape','yeoman','src-d',
-     'ustwo','coderdojo','cfibmers','keystonejs','tableflip','teamtito','codacy',
-     'saltstack','baremetrics','vmware','uswitch','gocardless','ucl','Leanstack',
-     'airbrake','18f','joyent','liferay']
+  def tree_path(options={})
+    project_path(options.except(:kind)) + "/tree#{options[:kind].present? ? '?kind='+options[:kind] : '' }"
+  end
+
+  def version_tree_path(options={})
+    version_path(options.except(:kind)) + "/tree#{options[:kind].present? ? '?kind='+options[:kind] : '' }"
+  end
+
+  def usage_cache_length(total)
+    return 1 if total <= 0
+    (Math.log10(total).round+1)*2
+  end
+
+  def current_host_icon
+    current_host || 'code-fork'
   end
 end

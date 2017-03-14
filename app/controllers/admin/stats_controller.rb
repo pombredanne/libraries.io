@@ -14,17 +14,27 @@ class Admin::StatsController < Admin::ApplicationController
     @new_web_hooks      = stats_for(WebHook)
   end
 
-  def github
-    @new_github_users   = stats_for(GithubUser)
+  def repositories
+    @new_users          = stats_for(GithubUser)
     @new_manifests      = stats_for(Manifest)
     @new_readmes        = stats_for(Readme)
     @new_orgs           = stats_for(GithubOrganisation)
+  end
+
+  def overview
+
+  end
+
+  def graphs
+    @platform = params[:platform] || 'Rubygems'
+    @projects = Project.platform(@platform).where('projects.created_at > ?', 3.months.ago).group_by_day(:created_at).count
+    @versions = Version.joins(:project).where('lower(projects.platform) = ?', @platform.downcase).where('versions.created_at > ?', 3.months.ago).group_by_day('versions.created_at').count
   end
 
   private
 
   def stats_for(klass)
     period = 3.days.ago.beginning_of_day
-    klass.where('created_at > ?', period).group("date(created_at)").count.sort_by{|k,v| k }.reverse
+    klass.where('created_at > ?', period).group("date(created_at)").count.sort_by{|k,_v| k }.reverse
   end
 end

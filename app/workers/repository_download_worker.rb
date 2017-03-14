@@ -1,9 +1,8 @@
 class RepositoryDownloadWorker
   include Sidekiq::Worker
-  sidekiq_options queue: :critical, unique: :until_executed
+  sidekiq_options queue: :low, unique: :until_executed
 
-  def perform(class_name, name)
-    klass = "Repositories::#{class_name}".constantize
-    klass.update(name)
+  def perform(repo_id, token = nil)
+    Repository.find_by_id(repo_id).try(:update_all_info, token)
   end
 end

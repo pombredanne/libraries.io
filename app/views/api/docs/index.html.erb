@@ -1,10 +1,12 @@
+<% title 'API Documentation - Libraries.io' %>
+
 <div class="row">
   <div class="col-md-12">
     <h1>API Docs</h1>
   </div>
 </div>
 <div class="row">
-  <div class="col-md-8">
+  <div class="col-sm-8">
     <h3 id='authentication'>Authentication</h3>
 
     <p>
@@ -21,6 +23,18 @@
       All requests are subject to a 60/request/minute rate limit based on your api_key, any further requests within that timeframe will result in a <code>403</code> response.
     </p>
 
+    <h3 id='pagination'>Pagination</h3>
+
+    <p>
+      All requests that return multiple results can be paginated using the
+      `page` and `per_page` query parameters.
+    </p>
+
+    <ul>
+      <li><code>page</code> (default is `1`)</li>
+      <li><code>per_page</code> (default is `30`, max is `100`)</li>
+    </ul>
+
     <h3 id='project'>Project</h3>
 
     <p>
@@ -36,7 +50,7 @@
     </p>
     <% cache "api-docs-#{@cache_version}-project", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @project.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} }) %></pre>
+<%= JSON.pretty_generate project_json_response(@project) %></pre>
     <% end %>
     <h3 id='project-dependencies'>Project Dependencies</h3>
 
@@ -61,9 +75,7 @@
       Get projects that have at least one version that depends on a given project.
     </p>
 
-    <p>
-      Pagination parameter: <code>page</code>
-    </p>
+
 
     <p>
       <code>GET https://libraries.io/api/:platform/:name/dependents?api_key=<%= @api_key %></code>
@@ -74,17 +86,15 @@
     </p>
     <% cache "api-docs-#{@cache_version}-project-dependents", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @project.dependent_projects.paginate(page: 1).as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} }) %></pre>
+<%= JSON.pretty_generate project_json_response(@project.dependent_projects.paginate(page: 1)) %></pre>
     <% end %>
     <h3 id="project-dependent-repositories">Project Dependent Repositories</h3>
 
     <p>
-      Get github repositories that depend on a given project.
+      Get repositories that depend on a given project.
     </p>
 
-    <p>
-      Pagination parameter: <code>page</code>
-    </p>
+
 
     <p>
       <code>GET https://libraries.io/api/:platform/:name/dependent_repositories?api_key=<%= @api_key %></code>
@@ -95,17 +105,13 @@
     </p>
     <% cache "api-docs-#{@cache_version}-project-dependent-repositories", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @project.dependent_repositories.paginate(page: 1).as_json(except: [:id, :github_organisation_id, :owner_id]) %></pre>
+<%= JSON.pretty_generate @project.dependent_repositories.paginate(page: 1).as_json(except: [:id, :github_organisation_id, :owner_id], methods: [:github_contributions_count, :github_id]) %></pre>
     <% end %>
 
     <h3 id="project-search">Project Search</h3>
 
     <p>
       Search for projects
-    </p>
-
-    <p>
-      Pagination parameter: <code>page</code>
     </p>
 
     <p>
@@ -117,60 +123,60 @@
     </p>
     <% cache "api-docs-#{@cache_version}-project-search", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @search.as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} }) %></pre>
+<%= JSON.pretty_generate project_json_response(@search) %></pre>
     <% end %>
-    <h3 id='github-repository'>GitHub Repository</h3>
+    <h3 id='repository'>Repository</h3>
 
     <p>
-      Get a info for a GitHub repository. Currently only works for open source repositories.
+      Get a info for a repository. Currently only works for open source repositories.
     </p>
     <p>
       <code>GET https://libraries.io/api/github/:owner/:name?api_key=<%= @api_key %></code>
     </p>
     <hr>
     <p>
-      Example: <strong> <%= link_to "https://libraries.io/api/github/#{@github_repository.full_name}?api_key=#{@api_key}", "https://libraries.io/api/github/#{@github_repository.full_name}?api_key=#{@api_key}" %> </strong>
+      Example: <strong> <%= link_to "https://libraries.io/api/github/#{@repository.full_name}?api_key=#{@api_key}", "https://libraries.io/api/github/#{@repository.full_name}?api_key=#{@api_key}" %> </strong>
     </p>
-    <% cache "api-docs-#{@cache_version}-github-repository", :expires_in => 1.day do %>
+    <% cache "api-docs-#{@cache_version}-repository", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @github_repository.as_json({except: [:id, :github_organisation_id, :owner_id]}) %></pre>
+<%= JSON.pretty_generate @repository.as_json({except: [:id, :github_organisation_id, :owner_id], methods: [:github_contributions_count, :github_id]}) %></pre>
     <% end %>
-    <h3 id='github-repository-dependencies'>GitHub Repository Dependencies</h3>
+    <h3 id='repository-dependencies'>Repository Dependencies</h3>
 
     <p>
-      Get a list of dependencies for a GitHub repositories. Currently only works for open source repositories.
+      Get a list of dependencies for a repositories. Currently only works for open source repositories.
     </p>
     <p>
       <code>GET https://libraries.io/api/github/:owner/:name/dependencies?api_key=<%= @api_key %></code>
     </p>
     <hr>
     <p>
-      Example: <strong> <%= link_to "https://libraries.io/api/github/#{@github_repository.full_name}/dependencies?api_key=#{@api_key}", "https://libraries.io/api/github/#{@github_repository.full_name}/dependencies?api_key=#{@api_key}" %> </strong>
+      Example: <strong> <%= link_to "https://libraries.io/api/github/#{@repository.full_name}/dependencies?api_key=#{@api_key}", "https://libraries.io/api/github/#{@repository.full_name}/dependencies?api_key=#{@api_key}" %> </strong>
     </p>
-    <% cache "api-docs-#{@cache_version}-github-repository-dependencies", :expires_in => 1.day do %>
+    <% cache "api-docs-#{@cache_version}-repository-dependencies", :expires_in => 1.day do %>
       <pre>
 <%= JSON.pretty_generate @repo_dependencies %></pre>
     <% end %>
-    <h3 id="github-repository-projects">GitHub Repository Projects</h3>
+    <h3 id="repository-projects">Repository Projects</h3>
 
     <p>
-      Get a list of projects referencing the given GitHub repository.
+      Get a list of projects referencing the given repository.
     </p>
     <p>
       <code>GET https://libraries.io/api/github/:owner/:name/projects?api_key=<%= @api_key %></code>
     </p>
     <hr>
     <p>
-      Example: <strong> <%= link_to "https://libraries.io/api/github/#{@github_repository.full_name}/projects?api_key=#{@api_key}", "https://libraries.io/api/github/#{@github_repository.full_name}/projects?api_key=#{@api_key}" %> </strong>
+      Example: <strong> <%= link_to "https://libraries.io/api/github/#{@repository.full_name}/projects?api_key=#{@api_key}", "https://libraries.io/api/github/#{@repository.full_name}/projects?api_key=#{@api_key}" %> </strong>
     </p>
-    <% cache "api-docs-#{@cache_version}-github-repository-projects", :expires_in => 1.day do %>
+    <% cache "api-docs-#{@cache_version}-repository-projects", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @github_repository.projects.includes(:versions, :github_repository).paginate(page: 1).as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} }) %></pre>
+<%= JSON.pretty_generate project_json_response(@repository.projects.includes(:versions, :repository).paginate(page: 1)) %></pre>
     <% end %>
 
-    <h3 id='github-user'>Github User</h3>
+    <h3 id='user'>User</h3>
     <p>
-      Get information for a given GitHub User or Organization
+      Get information for a given User or Organization
     </p>
     <p>
       <code>GET https://libraries.io/api/github/:login?api_key=<%= @api_key %></code>
@@ -179,7 +185,7 @@
     <p>
       Example: <strong><%= link_to "https://libraries.io/api/github/#{@github_user.login}?api_key=#{@api_key}", "https://libraries.io/api/github/#{@github_user.login}?api_key=#{@api_key}" %></strong>
     </p>
-    <% cache "api-docs-#{@cache_version}-github-user", :expires_in => 1.day do %>
+    <% cache "api-docs-#{@cache_version}-user", :expires_in => 1.day do %>
       <pre>
 <%= JSON.pretty_generate @github_user.as_json %></pre>
     <% end %>
@@ -187,11 +193,7 @@
     <h3 id="github-user-repositories">GitHub User Repositories</h3>
 
     <p>
-      Get github repositories owned by a Github User
-    </p>
-
-    <p>
-      Pagination parameter: <code>page</code>
+      Get repositories owned by a Github User
     </p>
 
     <p>
@@ -203,7 +205,7 @@
     </p>
     <% cache "api-docs-#{@cache_version}-github-user-repositories", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @github_user.open_source_github_repositories.paginate(page: 1).as_json(except: [:id, :github_organisation_id, :owner_id]) %></pre>
+<%= JSON.pretty_generate @github_user.open_source_repositories.paginate(page: 1).as_json(except: [:id, :github_organisation_id, :owner_id], methods: [:github_contributions_count, :github_id]) %></pre>
     <% end %>
 
     <h3 id="github-user-projects">GitHub User Projects</h3>
@@ -211,9 +213,7 @@
     <p>
       Get a list of projects referencing the given GitHub users repositories.
     </p>
-    <p>
-      Pagination parameter: <code>page</code>
-    </p>
+
     <p>
       <code>GET https://libraries.io/api/github/:login/projects?api_key=<%= @api_key %></code>
     </p>
@@ -223,16 +223,14 @@
     </p>
     <% cache "api-docs-#{@cache_version}-github-user-projects", :expires_in => 1.day do %>
       <pre>
-<%= JSON.pretty_generate @github_user.projects.includes(:versions, :github_repository).paginate(page: 1).as_json(only: Project::API_FIELDS, methods: [:package_manager_url, :stars, :forks, :keywords], include: {versions: {only: [:number, :published_at]} }) %></pre>
+<%= JSON.pretty_generate project_json_response(@github_user.projects.includes(:versions, :repository).paginate(page: 1)) %></pre>
     <% end %>
 
     <h3 id='subscriptions-index'>User Subscriptions</h3>
     <p>
       List projects that a user is subscribed to recieved notifications about new releases
     </p>
-    <p>
-      Pagination parameter: <code>page</code>
-    </p>
+
     <p>
       <code>GET https://libraries.io/api/subscriptions?api_key=<%= @api_key %></code>
     </p>
@@ -311,42 +309,42 @@
       Example: <strong> <%= link_to "https://libraries.io/api/subscriptions/#{@project.platform}/#{@project.name}?api_key=#{@api_key}", "https://libraries.io/api/subscriptions/#{@project.platform}/#{@project.name}?api_key=#{@api_key}" %> </strong>
     </p>
   </div>
-  <div class="col-md-4">
-    <div style="position:fixed">
-      <h3>API Methods</h3>
-      <ul>
-        <li><a href="#authentication">Authentication</a></li>
-        <li><a href="#rate-limit">Rate limit</a></li>
-      </ul>
-      <ul>
-        <li><a href="#project">Project</a></li>
-        <li><a href="#project-dependencies">Project Dependencies</a></li>
-        <li><a href="#project-dependents">Project Dependents</a></li>
-        <li><a href="#project-dependent-repositories">Project Dependent Repositories</a></li>
-        <li><a href="#project-search">Project Search</a></li>
-      </ul>
-      <ul>
-        <li><a href="#github-repository">GitHub Repository</a></li>
-        <li><a href="#github-repository-dependencies">GitHub Repository Dependencies</a></li>
-        <li><a href="#github-repository-projects">GitHub Repository Projects</a></li>
-      </ul>
-      <ul>
-        <li><a href="#github-user">GitHub User</a></li>
-        <li><a href="#github-user-repositories">GitHub User Repositories</a></li>
-        <li><a href="#github-user-projects">GitHub User Projects</a></li>
-      </ul>
-      <ul>
-        <li><a href="#subscriptions-index">User Subscriptions</a></li>
-        <li><a href="#subscriptions-create">Subscribe to a project</a></li>
-        <li><a href="#subscriptions-show">Check if subscribed to a project</a></li>
-        <li><a href="#subscriptions-update">Update a subscription</a></li>
-        <li><a href="#subscriptions-destroy">Unsubscribe from a project</a></li>
-      </ul>
-      <p>
-        For any questions, feature requests or bug reports<br/>
-        email <%= mail_to 'support@libraries.io', 'support@libraries.io', subject: 'Libraries.io API' %> or
-        <%= link_to 'open an issue', 'https://github.com/librariesio/support/issues/new' %>.
-      </p>
-    </div>
+  <div class="col-sm-4">
+    <%= render 'adsense/sidebar' %>
+    <h3>API Methods</h3>
+    <ul>
+      <li><a href="#authentication">Authentication</a></li>
+      <li><a href="#rate-limit">Rate limit</a></li>
+      <li><a href="#pagination">Pagination</a></li>
+    </ul>
+    <ul>
+      <li><a href="#project">Project</a></li>
+      <li><a href="#project-dependencies">Project Dependencies</a></li>
+      <li><a href="#project-dependents">Project Dependents</a></li>
+      <li><a href="#project-dependent-repositories">Project Dependent Repositories</a></li>
+      <li><a href="#project-search">Project Search</a></li>
+    </ul>
+    <ul>
+      <li><a href="#repository">Repository</a></li>
+      <li><a href="#repository-dependencies">Repository Dependencies</a></li>
+      <li><a href="#repository-projects">Repository Projects</a></li>
+    </ul>
+    <ul>
+      <li><a href="#github-user">GitHub User</a></li>
+      <li><a href="#github-user-repositories">GitHub User Repositories</a></li>
+      <li><a href="#github-user-projects">GitHub User Projects</a></li>
+    </ul>
+    <ul>
+      <li><a href="#subscriptions-index">User Subscriptions</a></li>
+      <li><a href="#subscriptions-create">Subscribe to a project</a></li>
+      <li><a href="#subscriptions-show">Check if subscribed to a project</a></li>
+      <li><a href="#subscriptions-update">Update a subscription</a></li>
+      <li><a href="#subscriptions-destroy">Unsubscribe from a project</a></li>
+    </ul>
+    <p>
+      For any questions, feature requests or bug reports<br/>
+      email <%= mail_to 'support@libraries.io', 'support@libraries.io', subject: 'Libraries.io API' %> or
+      <%= link_to 'open an issue', 'https://github.com/librariesio/libraries.io/issues/new' %>.
+    </p>
   </div>
 </div>

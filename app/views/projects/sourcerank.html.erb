@@ -1,4 +1,4 @@
-<% title "SourceRank Breakdown for #{@project} on #{@project.platform_name} - Libraries" %>
+<% title "SourceRank Breakdown for #{@project} on #{@project.platform_name} - Libraries.io" %>
 
 <div class="row">
   <div class="col-md-12">
@@ -10,9 +10,11 @@
 <div class="row">
   <% cache(['SourceRank', @project]) do  %>
     <% @breakdown = @project.source_rank_breakdown %>
-    <div class="col-md-8">
+    <div class="col-sm-8">
+      <%= render 'adsense/banner' %>
       <ul class="list-group">
         <% @breakdown.each do |key, value| %>
+          <% next if skip_showing_if_zero?(key, value) %>
           <li class="list-group-item">
             <span class="badge <%= source_rank_badge_class(value) %>">
               <%= value %>
@@ -32,7 +34,8 @@
       </ul>
     </div>
   <% end %>
-  <div class="col-md-4">
+  <div class="col-sm-4">
+    <%= render 'adsense/sidebar' %>
     <h3>
       <strong>
         What's SourceRank used for?
@@ -45,7 +48,7 @@
       The factors are based on attributes of a project that make it appear like a dependable library and can be handy to compare different projects.
     </p>
     <p>
-      Got a question or suggestion to improve SourceRank? Open an <%= link_to 'issue on GitHub', 'https://github.com/librariesio/support/issues' %>, <%= link_to 'tweet us', 'https://twitter.com/librariesio' %> or email <%= mail_to 'support@libraries.io', 'support@libraries.io' %>
+      Got a question or suggestion to improve SourceRank? Open an <%= link_to 'issue', 'https://github.com/librariesio/libraries.io/issues' %>, <%= link_to 'tweet us', 'https://twitter.com/librariesio' %> or email <%= mail_to 'support@libraries.io', 'support@libraries.io' %>
     </p>
   </div>
 </div>

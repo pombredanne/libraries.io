@@ -1,21 +1,15 @@
-<% title "#{github_user_title(@user)} on GitHub - Libraries" %>
-<% description "GitHub repositories created and contributed to by #{github_user_title(@user)}" %>
+<% title "#{user_title(@user)} - Libraries.io" %>
+<% description "Repositories created and contributed to by #{user_title(@user)}" %>
 <%= content_for :meta, render_meta(@user) %>
-<% cache([@user, 'users:show', 'v3'], :expires_in => 1.week) do %>
+<% cache([@user, 'users:show', 'v3'], :expires_in => 1.day) do %>
 <div class="row">
-  <div class="col-md-6">
+  <div class="col-sm-6">
     <h1>
       <%= image_tag @user.avatar_url(100), width: 50, height: 50, alt: @user %>
       <%= @user %>
       <%= link_to fa_icon('github'), @user.github_url, class: 'tip', title: "View #{@user.login} on GitHub" %>
     </h1>
-    <% if @user.org? %>
-      <% if @user.description.present? %>
-        <p>
-          <%= @user.description %>
-        </p>
-      <% end %>
-    <% else %>
+    <% unless @user.org? %>
       <% count = @user.open_source_contributions.count %>
       <% if count > 0 %>
         <p>
@@ -24,12 +18,17 @@
         </p>
       <% end %>
     <% end %>
+    <% if @user.bio.present? %>
+      <p>
+        <%= @user.bio %>
+      </p>
+    <% end %>
   </div>
-  <div class="col-md-6">
+  <div class="col-sm-6">
     <br>
     <% if @user.blog.present? %>
       <p>
-        Homepage: <%= link_to @user.blog, sanitize_url(@user.blog) %>
+        Homepage: <%= link_to @user.blog, sanitize_url(@user.blog), :rel => 'nofollow' %>
       </p>
     <% end %>
     <% if @user.company.present? %>
@@ -39,7 +38,7 @@
     <% end %>
     <% if @user.location.present? %>
       <p>
-        Location: <%= link_to @user.location, "http://maps.google.com/?q=#{@user.location}" %>
+        Location: <%= link_to @user.location, "http://maps.google.com/?q=#{ERB::Util.url_encode(@user.location)}" %>
       </p>
     <% end %>
   </div>
@@ -49,32 +48,33 @@
 
 <div class="row">
   <div class="col-md-8">
+    <%= render 'adsense/banner' %>
     <div class="row">
       <% if @repositories.length > 0 %>
-        <div class="col-md-6 user-column">
+        <div class="col-sm-6 user-column">
           <h4>Repositories</h4>
           <%= render @repositories, cache: true %>
           <%= link_to "See all #{@user}'s repositories", user_repositories_path(@user) %>
         </div>
       <% end %>
       <% if @contributions.length > 0 %>
-        <div class="col-md-6 user-column">
+        <div class="col-sm-6 user-column">
           <h4>Repositories Contributed To</h4>
-          <%= render @contributions.map(&:github_repository), cache: true  %>
+          <%= render @contributions.map(&:repository), cache: true  %>
           <%= link_to "See all #{@user}'s contributions", user_contributions_path(@user) %>
         </div>
       <% end %>
     </div>
     <div class="row">
       <% if @projects.length > 0 %>
-        <div class="col-md-6 user-column">
+        <div class="col-sm-6 user-column">
           <h4>Published Projects</h4>
           <%= render @projects, cache: true %>
           <%= link_to "See all #{@user}'s projects", user_projects_path(@user) %>
         </div>
       <% end %>
       <% if @favourite_projects.length > 0 %>
-        <div class="col-md-6 user-column">
+        <div class="col-sm-6 user-column">
           <h4>Most Used Projects</h4>
           <%= render @favourite_projects, cache: true %>
         </div>
@@ -82,9 +82,15 @@
     </div>
   </div>
   <div class="col-md-4">
+    <%= render 'adsense/sidebar' %>
     <% if @user.org? %>
       <% if @user.top_contributors.any?  %>
-        <h4>Top Contributors</h4>
+        <h4>
+          Top Contributors
+          <small>
+            <%= link_to "See all", user_contributors_path(@user) %>
+          </small>
+        </h4>
         <%= render @user.top_contributors %>
       <% end %>
     <% else %>

@@ -1,196 +1,270 @@
 namespace :download do
+  desc 'Download undownloaded github repositories'
   task new_github_repos: :environment do
-    Download.new_github_repos
+    Project.undownloaded_repos.order('created_at DESC').find_each(&:update_repository_async)
   end
 
+  desc 'Download small registries all packages'
   task small_registries: [:emacs, :hackage, :sublime, :inqlude, :shards]
 
+  desc 'Download Alcatraz packages asynchronously'
   task alcatraz: :environment do
-    Repositories::Alcatraz.import_async
+    PackageManager::Alcatraz.import_async
   end
 
+  desc 'Download recent Atom packages asynchronously'
   task atom: :environment do
-    Repositories::Atom.import_recent_async
+    PackageManager::Atom.import_recent_async
   end
 
+  desc 'Download all Atom packages asynchronously'
   task atom_all: :environment do
-    Repositories::Atom.import_async
+    PackageManager::Atom.import_async
   end
 
+  desc 'Download new Bower packages asynchronously'
   task bower: :environment do
-    Repositories::Bower.import_new_async
+    PackageManager::Bower.import_new_async
   end
 
+  desc 'Download all Bower packages'
+  task bower_all: :environment do
+    if Date.today.wday.zero?
+      PackageManager::Bower.import
+    end
+  end
+
+  desc 'Download recent Cargo packages asynchronously'
   task cargo: :environment do
-    Repositories::Cargo.import_async
+    PackageManager::Cargo.import_recent_async
   end
 
+  desc 'Download all Carthage packages asynchronously'
   task carthage: :environment do
-    Repositories::Carthage.import_async
+    PackageManager::Carthage.import_async
   end
 
+  desc 'Download recent Clojars packages'
   task clojars: :environment do
-    Repositories::Clojars.import_async
+    PackageManager::Clojars.import_recent
   end
 
+  desc 'Download recent CPAN packages asynchronously'
   task cpan: :environment do
-    Repositories::CPAN.import_recent_async
+    PackageManager::CPAN.import_recent_async
   end
 
+  desc 'Download all CPAN packages asynchronously'
   task cpan_all: :environment do
-    Repositories::CPAN.import_async
+    PackageManager::CPAN.import_async
   end
 
+  desc 'Download recent CocoaPods packages asynchronously'
   task cocoapods: :environment do
-    Repositories::CocoaPods.import
+    PackageManager::CocoaPods.import_recent_async
   end
 
+  desc 'Download all CocoaPods packages asynchronously'
+  task cocoapods_all: :environment do
+    PackageManager::CocoaPods.import_async
+  end
+
+  desc 'Download recent CRAN packages asynchronously'
   task cran: :environment do
-    Repositories::CRAN.import_recent_async
+    PackageManager::CRAN.import_recent_async
   end
 
+  desc 'Download all CRAN packages asynchronously'
   task cran_all: :environment do
-    Repositories::CRAN.import_async
+    PackageManager::CRAN.import_async
   end
 
+  desc 'Download all Dub packages asynchronously'
   task dub: :environment do
-    Repositories::Dub.import_async
+    PackageManager::Dub.import_async
   end
 
+  desc 'Download recent Elm packages asynchronously'
   task elm: :environment do
-    Repositories::Elm.import_async
+    PackageManager::Elm.import_recent_async
   end
 
+  desc 'Download all Elm packages asynchronously'
+  task elm_all: :environment do
+    PackageManager::Elm.import_async
+  end
+
+  desc 'Download all emacs packages asynchronously'
   task emacs: :environment do
-    Repositories::Emacs.import_async
+    PackageManager::Emacs.import_async
   end
 
+  desc 'Download recent Hackage packages asynchronously'
   task hackage: :environment do
-    Repositories::Hackage.import_recent_async
+    PackageManager::Hackage.import_recent_async
   end
 
+  desc 'Download all Hackage packages asynchronously'
   task hackage_all: :environment do
-    Repositories::Hackage.import_async
+    PackageManager::Hackage.import_async
   end
 
+  desc 'Download recent Haxelib packages asynchronously'
+  task haxelib: :environment do
+    PackageManager::Haxelib.import_recent_async
+  end
+
+  desc 'Download all Haxelib packages asynchronously'
+  task haxelib_all: :environment do
+    PackageManager::Haxelib.import_async
+  end
+
+  desc 'Download recent Hex packages asynchronously'
   task hex: :environment do
-    Repositories::Hex.import_recent_async
+    PackageManager::Hex.import_recent_async
   end
 
+  desc 'Download all Hex packages'
   task hex_all: :environment do
-    Repositories::Hex.import
+    PackageManager::Hex.import
   end
 
+  desc 'Download recent Homebrew packages asynchronously'
   task homebrew: :environment do
-    Repositories::Homebrew.import_recent_async
+    PackageManager::Homebrew.import_recent_async
   end
 
+  desc 'Download all Homebrew packages asynchronously'
   task homebrew_all: :environment do
-    Repositories::Homebrew.import_async
+    PackageManager::Homebrew.import_async
   end
 
+  desc 'Download all Inqlude packages'
   task inqlude: :environment do
-    Repositories::Inqlude.import
+    PackageManager::Inqlude.import
   end
 
-  task jam: :environment do
-    Repositories::Jam.import_async
-  end
-
+  desc 'Download all Julia packages asynchronously'
   task julia: :environment do
-    Repositories::Julia.import_async
+    PackageManager::Julia.import_async
   end
 
+  desc 'Download recent Maven packages asynchronously'
   task maven: :environment do
-    Repositories::Maven.load_names(50)
-    Repositories::Maven.import_recent_async
+    PackageManager::Maven.load_names(50)
+    PackageManager::Maven.import_recent_async
   end
 
+  desc 'Download all Maven packages asynchronously'
   task maven_all: :environment do
-    Repositories::Maven.load_names
-    Repositories::Maven.import_async
+    PackageManager::Maven.load_names
+    PackageManager::Maven.import_async
   end
 
+  desc 'Download all Meteor packages asynchronously'
   task meteor: :environment do
-    Repositories::Meteor.import_async
+    PackageManager::Meteor.import_async
   end
 
+  desc 'Download all Nimble packages asynchronously'
   task nimble: :environment do
-    Repositories::Nimble.import_async
+    PackageManager::Nimble.import_async
   end
 
+  desc 'Download recent NuGet packages asynchronously'
   task nuget: :environment do
-    Repositories::NuGet.load_names(3)
-    Repositories::NuGet.import_recent_async
+    PackageManager::NuGet.load_names(3)
+    PackageManager::NuGet.import_recent_async
   end
 
+  desc 'Download all NuGet packages asynchronously'
   task nuget_all: :environment do
-    Repositories::NuGet.load_names
-    Repositories::NuGet.import
+    PackageManager::NuGet.load_names
+    PackageManager::NuGet.import_async
   end
 
+  desc 'Download recent NPM packages asynchronously'
   task npm: :environment do
-    Repositories::NPM.import_recent_async
+    PackageManager::NPM.import_recent_async
   end
 
+  desc 'Download all NPM packages'
   task npm_all: :environment do
-    Repositories::NPM.import
+    PackageManager::NPM.import
   end
 
+  desc 'Download recent Packagist packages asynchronously'
   task packagist: :environment do
-    Repositories::Packagist.import_recent_async
+    PackageManager::Packagist.import_recent_async
   end
 
+  desc 'Download all Packagist packages asynchronously'
   task packagist_all: :environment do
-    Repositories::Packagist.import_async
+    PackageManager::Packagist.import_async
   end
 
+  desc 'Download packages asynchronously'
   task platformio: :environment do
-    Repositories::PlatformIO.import
+    PackageManager::PlatformIO.import_async
   end
 
+  desc 'Download recent Pub packages asynchronously'
   task pub: :environment do
-    Repositories::Pub.import_async
+    PackageManager::Pub.import_recent_async
   end
 
+  desc 'Download recent Pypi packages asynchronously'
   task pypi: :environment do
-    Repositories::Pypi.import_recent_async
+    PackageManager::Pypi.import_recent_async
   end
 
+  desc 'Download all Pypi packages asynchronously'
   task pypi_all: :environment do
-    Repositories::Pypi.import_async
+    PackageManager::Pypi.import_async
   end
 
+  desc 'Download recent Rubygems packages asynchronously'
   task rubygems: :environment do
-    Repositories::Rubygems.import_recent_async
+    PackageManager::Rubygems.import_recent_async
   end
 
+  desc 'Download all Rubygems packages asynchronously'
   task rubygems_all: :environment do
-    Repositories::Rubygems.import_async
+    PackageManager::Rubygems.import_async
   end
 
+  desc 'Download all Shards packages asynchronously'
   task shards: :environment do
-    Repositories::Shards.import_async
+    PackageManager::Shards.import_async
   end
 
+  desc 'Download all SwiftPM packages'
+  task swift: :environment do
+    PackageManager::SwiftPM.import
+  end
 
+  desc 'Download all Sublime packages asynchronously'
   task sublime: :environment do
-    Repositories::Sublime.import_async
+    PackageManager::Sublime.import_async
   end
 
+  desc 'Download recent Wordpress packages asynchronously'
   task wordpress: :environment do
-    Repositories::Wordpress.import_recent_async
+    PackageManager::Wordpress.import_recent_async
   end
 
+  desc 'Download all Wordpress packages asynchronously'
   task wordpress_all: :environment do
-    Repositories::Wordpress.import_async
+    PackageManager::Wordpress.import_async
   end
 
+  desc 'Download new Go packages asynchronously'
   task go: :environment do
-    Repositories::Go.import_new_async
+    PackageManager::Go.import_new_async
   end
 
+  desc 'Download all Go packages asynchronously'
   task go_all: :environment do
-    Repositories::Go.import_async
+    PackageManager::Go.import_async
   end
 end

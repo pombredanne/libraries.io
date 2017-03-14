@@ -1,5 +1,9 @@
 class ProjectsController < ApplicationController
-  before_action :ensure_logged_in, only: [:your_dependent_repos, :mute, :unmute]
+  before_action :ensure_logged_in, only: [:your_dependent_repos, :mute, :unmute,
+                                          :unsubscribe, :sync]
+  before_action :find_project, only: [:show, :sourcerank, :about, :dependents,
+                                      :dependent_repos, :your_dependent_repos,
+                                      :versions, :tags, :mute, :unmute, :unsubscribe, :sync]
 
   def index
     if current_user
@@ -18,64 +22,26 @@ class ProjectsController < ApplicationController
   end
 
   def bus_factor
-    @search = Project.bus_factor_search(filters: {
-      platform: current_platform,
-      normalized_licenses: current_license,
-      language: current_language
-    }).paginate(page: page_number)
-    @projects = @search.records.includes(:github_repository, :versions)
+    problem_repos(:bus_factor_search)
   end
 
   def unlicensed
-    @search = Project.unlicensed_search(filters: {
-      platform: current_platform,
-      normalized_licenses: current_license,
-      language: current_language
-    }).paginate(page: page_number)
-    @projects = @search.records.includes(:github_repository, :versions)
+    problem_repos(:unlicensed_search)
   end
 
   def deprecated
-    if params[:platform].present?
-      find_platform(:platform)
-      raise ActiveRecord::RecordNotFound if @platform_name.nil?
-      scope = Project.platform(@platform_name)
-    else
-      scope = Project
-    end
-
-    @platforms = Project.deprecated.group('platform').count.sort_by(&:last).reverse
-    @projects = scope.deprecated.includes(:github_repository, :versions).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    project_scope(:deprecated)
   end
 
   def removed
-    if params[:platform].present?
-      find_platform(:platform)
-      raise ActiveRecord::RecordNotFound if @platform_name.nil?
-      scope = Project.platform(@platform_name)
-    else
-      scope = Project
-    end
-
-    @platforms = Project.removed.group('platform').count.sort_by(&:last).reverse
-    @projects = scope.removed.includes(:github_repository, :versions).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    project_scope(:removed)
   end
 
   def unmaintained
-    if params[:platform].present?
-      find_platform(:platform)
-      raise ActiveRecord::RecordNotFound if @platform_name.nil?
-      scope = Project.platform(@platform_name)
-    else
-      scope = Project
-    end
-
-    @platforms = Project.unmaintained.group('platform').count.sort_by(&:last).reverse
-    @projects = scope.unmaintained.includes(:github_repository, :versions).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
+    project_scope(:unmaintained)
   end
 
   def show
-    find_project
     if incorrect_case?
       if params[:number].present?
         return redirect_to(version_path(@project.to_param.merge(number: params[:number])), :status => :moved_permanently)
@@ -84,39 +50,33 @@ class ProjectsController < ApplicationController
       end
     end
     find_version
+    fresh_when([@project, @version])
     @dependencies = (@versions.size > 0 ? (@version || @versions.first).dependencies.includes(project: :versions).order('project_name ASC').limit(100) : [])
     @contributors = @project.contributors.order('count DESC').visible.limit(20)
   end
 
   def sourcerank
-    find_project
+
   end
 
   def about
-    find_project
     find_version
     send_data render_to_string(:about, layout: false), filename: "#{@project.platform.downcase}-#{@project}.ABOUT", type: 'application/text', disposition: 'attachment'
   end
 
   def dependents
-    find_project
-    @dependents = WillPaginate::Collection.create(page_number, 30, @project.dependents_count) do |pager|
-      pager.replace(@project.dependent_projects(page: page_number))
-    end
+    @dependents = @project.dependent_projects.paginate(page: page_number)
   end
 
   def dependent_repos
-    find_project
     @dependent_repos = @project.dependent_repositories.open_source.paginate(page: page_number)
   end
 
   def your_dependent_repos
-    find_project
     @dependent_repos = current_user.your_dependent_repos(@project).paginate(page: page_number)
   end
 
   def versions
-    find_project
     if incorrect_case?
       return redirect_to(project_versions_path(@project.to_param), :status => :moved_permanently)
     else
@@ -129,14 +89,13 @@ class ProjectsController < ApplicationController
   end
 
   def tags
-    find_project
     if incorrect_case?
       return redirect_to(project_tags_path(@project.to_param), :status => :moved_permanently)
     else
-      if @project.github_repository.nil?
+      if @project.repository.nil?
         @tags = []
       else
-        @tags = @project.github_tags.published.order('published_at DESC').paginate(page: page_number)
+        @tags = @project.tags.published.order('published_at DESC').paginate(page: page_number)
       end
       respond_to do |format|
         format.html
@@ -146,54 +105,64 @@ class ProjectsController < ApplicationController
   end
 
   def mute
-    find_project
     current_user.mute(@project)
-    redirect_to_back_or_default project_path(@project.to_param)
+    flash[:notice] = "Muted #{@project} notifications"
+    redirect_back fallback_location: project_path(@project.to_param)
   end
 
   def unmute
-    find_project
     current_user.unmute(@project)
-    redirect_to_back_or_default project_path(@project.to_param)
+    flash[:notice] = "Unmuted #{@project} notifications"
+    redirect_back fallback_location: project_path(@project.to_param)
+  end
+
+  def trending
+    orginal_scope = Project.includes(:repository).recently_created.maintained
+    scope = current_platform.present? ? orginal_scope.platform(current_platform) : orginal_scope
+    scope = current_language.present? ? scope.language(current_language) : scope
+    @projects = scope.hacker_news.paginate(page: page_number)
+    @platforms = orginal_scope.where('repositories.stargazers_count > 0').group('projects.platform').count.reject{|k,_v| k.blank? }.sort_by{|_k,v| v }.reverse.first(20)
+  end
+
+  def unsubscribe
+
+  end
+
+  def sync
+    if @project.recently_synced?
+      flash[:error] = "Project has already been synced recently"
+    else
+      @project.manual_sync
+      flash[:notice] = "Project has been queued to be resynced"
+    end
+    redirect_back fallback_location: project_path(@project.to_param)
+  end
+
+  def unseen_infrastructure
+    orginal_scope = Project.unsung_heroes
+    scope = current_platform.present? ? orginal_scope.platform(current_platform) : orginal_scope
+    @projects = scope.order('projects.dependent_repos_count DESC').paginate(page: page_number)
+    @platforms = orginal_scope.group('projects.platform').count.reject{|k,_v| k.blank? }.sort_by{|_k,v| v }.reverse.first(20)
   end
 
   private
+
+  def problem_repos(method_name)
+    @search = Project.send(method_name, filters: {
+      platform: current_platform,
+      normalized_licenses: current_license,
+      language: current_language
+    }).paginate(page: page_number)
+    indexes = Hash[@search.map{|r| r.id.to_i }.each_with_index.to_a]
+    @projects = @search.records.includes(:repository).sort_by { |u| indexes[u.id] }
+  end
 
   def incorrect_case?
     params[:platform] != params[:platform].downcase || (@project && params[:name] != @project.name)
   end
 
-  def find_version
-    @version_count = @project.versions.size
-    @github_repository = @project.github_repository
-    if @version_count.zero?
-      @versions = []
-      if @github_repository.present?
-        @github_tags = @github_repository.github_tags.published.order('published_at DESC').limit(10).to_a.sort
-        if params[:number].present?
-          @version = @github_repository.github_tags.published.find_by_name(params[:number])
-          raise ActiveRecord::RecordNotFound if @version.nil?
-        end
-      else
-        @github_tags = []
-      end
-      if @github_tags.empty?
-        raise ActiveRecord::RecordNotFound if params[:number].present?
-      end
-    else
-      @versions = @project.versions.sort.first(10)
-      if params[:number].present?
-        @version = @project.versions.find_by_number(params[:number])
-        raise ActiveRecord::RecordNotFound if @version.nil?
-      end
-    end
-    @version_number = @version.try(:number) || @project.latest_release_number
-  end
-
-  private
-
   def current_platform
-    Download.format_name(params[:platforms])
+    PackageManager::Base.format_name(params[:platforms])
   end
 
   def current_language
@@ -202,5 +171,10 @@ class ProjectsController < ApplicationController
 
   def current_license
     Spdx.find(params[:license]).try(:id) if params[:license].present?
+  end
+
+  def project_scope(scope_name)
+    @platforms = Project.send(scope_name).group('platform').count.sort_by(&:last).reverse
+    @projects = platform_scope.send(scope_name).includes(:repository).order('dependents_count DESC, projects.rank DESC, projects.created_at DESC').paginate(page: page_number, per_page: 20)
   end
 end

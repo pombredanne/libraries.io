@@ -1,4 +1,4 @@
-<% title "#{@platform_name} Libraries without licenses - Libraries" %>
+<% title "#{@platform_name} Libraries without licenses - Libraries.io" %>
 <% description "Help the community by encouraging the authors to add a LICENSE file to their #{@platform_name} libraries." %>
 <div class="row">
   <h1><i class="fa fa-copyright"></i> <%= @platform_name %> Libraries without licenses</h1>
@@ -6,7 +6,7 @@
 <hr>
 
 <div class="row">
-  <div class="col-md-8">
+  <div class="col-sm-8">
     <% @projects.each do |project| %>
       <div class="row">
         <div class='col-xs-8'>
@@ -14,7 +14,7 @@
         </div>
         <div class="col-xs-4">
           <br>
-          <%= link_to project.github_repository.try(:url), class: 'btn btn-primary' do %>
+          <%= link_to project.repository.try(:url), class: 'btn btn-primary' do %>
           Suggest a License
           <% end %>
           <% if current_user && current_user.admin? %>
@@ -30,7 +30,8 @@
       <small><%= page_entries_info @search, model: 'libraries without licenses' %></small>
     </p>
   </div>
-  <div class="col-md-4 facets">
+  <div class="col-sm-4 facets">
+    <%= render 'adsense/sidebar' %>
     <h3>
       <strong>
         What's the deal with licenses?
@@ -58,26 +59,7 @@
     </h3>
     <% @search.response.facets.each do |name, facet| %>
       <% next if facet['terms'].empty? %>
-      <h4><%= name.humanize %></h4>
-      <ul class='filter'>
-        <% facet['terms'].each do |term| %>
-          <% next if term['term'].blank? %>
-          <% active = term['term'] == params[name.to_sym] %>
-          <li class='<%= 'active' if active %>'>
-            <% if active %>
-              <%= link_to platform_name(term['term']), url_for(params.merge(name.to_sym => nil, page: nil)) %>
-            <% else %>
-              <%= link_to platform_name(term['term']), url_for(params.merge(name.to_sym => term['term'], page: nil)) %>
-              <small><%= number_to_human term['count'] %></small>
-            <% end %>
-          </li>
-        <% end %>
-        <% if params[name.to_sym].present? && !facet['terms'].map{|t| t['term']}.include?(params[name.to_sym]) %>
-          <li class='active'>
-            <%= link_to platform_name(params[name.to_sym]), url_for(params.merge(name.to_sym => nil, page: nil)) %>
-          </li>
-        <% end %>
-      </ul>
+      <%= render 'search/facet', name: name, facet: facet %>
     <% end %>
 
   </div>

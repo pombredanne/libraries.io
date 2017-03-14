@@ -1,17 +1,17 @@
-class RepositorySubscription < ActiveRecord::Base
+class RepositorySubscription < ApplicationRecord
   belongs_to :user
-  belongs_to :github_repository
+  belongs_to :repository
   has_many :subscriptions
 
   after_commit :update_subscriptions, on: :update
 
   def update_subscriptions
     projects = []
-    github_repository.repository_dependencies.each do |dep|
+    repository.repository_dependencies.each do |dep|
       if dep.project.present?
         project = dep.project.try(:id)
-      else
-        project = Project.platform(dep.platform).where('lower(name) = ?', dep.project_name.downcase).first.try(:id)
+      elsif dep.project_name.present?
+        project = Project.platform(dep.platform).where('lower(name) = ?', dep.project_name).first.try(:id)
       end
       projects << project
     end

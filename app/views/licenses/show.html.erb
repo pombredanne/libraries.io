@@ -1,11 +1,11 @@
-<% title "#{@license.name} license - Libraries" %>
+<% title "#{@license.name} license - Libraries.io" %>
 <% description "A detailed listing of the most popular, recently updated and most watched #{@license.name} licensed projects online" %>
 <% content_for :atom, auto_discovery_link_tag(:atom, search_url(licenses: @license.id, sort: 'latest_release_published_at', order: 'desc', format: :atom), title: "Updated #{@license.id} Projects") %>
 <% content_for :atom, auto_discovery_link_tag(:atom, search_url(licenses: @license.id, sort: 'created_at', order: 'desc', format: :atom), title: "New #{@license.id} Projects") %>
 
 <% cache([@license.id, 'licenses:show', 'v1'], :expires_in => 1.hour) do %>
 <div class="row">
-  <div class="col-md-6">
+  <div class="col-sm-6">
     <h1>
       <%= @license.name %>
       <% if @license.osi_approved? %>
@@ -13,7 +13,7 @@
       <% end %>
     </h1>
   </div>
-  <div class="col-md-6">
+  <div class="col-sm-6">
     <br>
     <p>
       <% url = "http://spdx.org/licenses/#{@license.id}" %>
@@ -31,7 +31,7 @@
   <div class="col-md-8">
     <div class='row'>
       <% if @popular.any? %>
-      <div class='col-md-6'>
+      <div class='col-sm-6 platform-column'>
         <h4>
           Popular <%= @license.id %> Projects
           <small class='more'>
@@ -43,7 +43,7 @@
       <% end %>
 
       <% if @created.any? %>
-      <div class='col-md-6'>
+      <div class='col-sm-6 platform-column'>
         <h4>
           <%= link_to search_url(licenses: @license.id, sort: 'created_at', order: 'desc', format: :atom), class: 'rss' do %>
             <%= fa_icon "rss-square" %>
@@ -56,11 +56,9 @@
         <%= render @created, cache: true %>
       </div>
       <% end %>
-    </div>
-    <hr>
-    <div class='row'>
+
       <% if @updated.any? %>
-      <div class='col-md-6'>
+      <div class='col-sm-6 platform-column'>
         <h4>
           <%= link_to search_url(licenses: @license.id, sort: 'latest_release_published_at', order: 'desc', format: :atom), class: 'rss' do %>
             <%= fa_icon "rss-square" %>
@@ -74,43 +72,60 @@
       </div>
       <% end %>
       <% if @watched.any? %>
-      <div class='col-md-6'>
+      <div class='col-sm-6 platform-column'>
         <h4>Most Watched <%= @license.id %> Projects</h4>
         <%= render @watched, cache: true %>
       </div>
       <% end %>
-    </div>
-    <% if @dependend.any? %>
-      <hr>
-      <div class="row">
-        <div class='col-md-6'>
+
+      <% if @dependent_repos.any? %>
+        <div class='col-sm-6 platform-column'>
+          <h4>Most Used <%= @license.id %> Projects</h4>
+          <%= render @dependent_repos, cache: true %>
+        </div>
+      <% end %>
+
+      <% if @dependend.any? %>
+        <div class='col-sm-6 platform-column'>
           <h4>Most Depended upon <%= @license.id %> Projects</h4>
           <%= render @dependend, cache: true %>
         </div>
-      </div>
-    <% end %>
+      <% end %>
+    </div>
   </div>
   <div class="col-md-4">
-    <% if @languages.any? %>
-    <div class='col-md-12'>
-      <h4>Popular <%= @license.id %> Languages</h4>
-      <%= render partial: 'languages/list_language', collection: @languages, as: :language %>
-    </div>
-    <% end %>
-
-    <% if @platforms.any? %>
-    <div class='col-md-12'>
-      <h4>Popular <%= @license.id %> Platforms</h4>
-      <%= render partial: 'platforms/list_platform', collection: @platforms, as: :platform %>
-    </div>
-    <% end %>
-
-    <% if @keywords.length > 1 %>
-      <div class='col-md-12'>
-        <h4>Popular <%= @license.id %> Keywords</h4>
-        <%= render partial: 'keywords/list_keyword', collection: @keywords, as: :keyword %>
+    <%= render 'adsense/sidebar' %>
+    <div class="row">
+      <% if @languages.many? %>
+      <div class='col-md-12 col-sm-4'>
+        <h4>
+          <%= fa_icon 'code' %>
+          Top <%= @license.id %> Languages
+        </h4>
+        <%= render partial: 'languages/list_language', collection: @languages, as: :language %>
       </div>
-    <% end %>
+      <% end %>
+
+      <% if @platforms.many? %>
+      <div class='col-md-12 col-sm-4'>
+        <h4>
+          <%= fa_icon 'archive' %>
+          Top <%= @license.id %> Package Managers
+        </h4>
+        <%= render partial: 'platforms/list_platform', collection: @platforms, as: :platform %>
+      </div>
+      <% end %>
+
+      <% if @keywords.many? %>
+        <div class='col-md-12 col-sm-4'>
+          <h4>
+            <%= fa_icon 'gavel' %>
+            Top <%= @license.id %> Keywords
+          </h4>
+          <%= render partial: 'keywords/list_keyword', collection: @keywords, as: :keyword %>
+        </div>
+      <% end %>
+    </div>
   </div>
 </div>
 <% end %>

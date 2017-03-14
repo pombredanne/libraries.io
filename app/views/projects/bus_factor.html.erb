@@ -1,11 +1,11 @@
-<% title "Improve the Bus Factor - Libraries" %>
+<% title "Improve the Bus Factor - Libraries.io" %>
 <div class="row">
   <h1><i class="fa fa-bus"></i> Improve the Bus Factor</h1>
 </div>
 <hr>
 
 <div class="row">
-  <div class="col-md-8">
+  <div class="col-sm-8">
     <% @projects.each do |project| %>
       <% cache(['bus-factor', project]) do  %>
         <div class="row">
@@ -32,13 +32,13 @@
               <% if project.stars > 0 %>
                - <%= number_to_human project.stars %> stars
               <% end %>
-              - <%= link_to pluralize(project.github_repository.try(:github_contributions_count), 'contributor'), project.github_repository.try(:contributors_url) %>
+              - <%= link_to pluralize(project.repository.try(:contributions_count), 'contributor'), project.repository.try(:contributors_url) %>
             </small>
           </div>
           <div class="col-xs-4">
             <br>
-            <%= link_to project.github_repository.try(:url), class: 'btn btn-primary' do %>
-            Contribute<span class='hidden-xs'> on GitHub</span>
+            <%= link_to project.repository.try(:url), class: 'btn btn-primary' do %>
+            Contribute
             <% end %>
           </div>
         </div>
@@ -46,7 +46,8 @@
     <% end %>
     <%= will_paginate @search, page_links: false %>
   </div>
-  <div class="col-md-4 facets">
+  <div class="col-sm-4 facets">
+    <%= render 'adsense/sidebar' %>
     <h3>
       <strong>
         What's the bus factor?
@@ -62,31 +63,11 @@
       You can help out by reviewing the code for these projects, helping out with open issues and pull requests and lending the maintainers a helping hand if required.
     </p>
     <p>
-      <em>This is an experiment based on GitHub contributions and available dependency data from package manager repositories that make it easily available.</em>
+      <em>This is an experiment based on contributions and available dependency data from package manager repositories that make it easily available.</em>
     </p>
     <% @search.response.facets.each do |name, facet| %>
       <% next if facet['terms'].empty? %>
-      <h4><%= name.humanize %></h4>
-      <ul class='filter'>
-        <% facet['terms'].each do |term| %>
-          <% next if term['term'].blank? %>
-          <% active = term['term'] == params[name.to_sym] %>
-          <li class='<%= 'active' if active %>'>
-            <% if active %>
-              <%= link_to platform_name(term['term']), url_for(params.merge(name.to_sym => nil, page: nil)) %>
-            <% else %>
-              <%= link_to platform_name(term['term']), url_for(params.merge(name.to_sym => term['term'], page: nil)) %>
-              <small><%= number_to_human term['count'] %></small>
-            <% end %>
-          </li>
-        <% end %>
-        <% if params[name.to_sym].present? && !facet['terms'].map{|t| t['term']}.include?(params[name.to_sym]) %>
-          <li class='active'>
-            <%= link_to platform_name(params[name.to_sym]), url_for(params.merge(name.to_sym => nil, page: nil)) %>
-          </li>
-        <% end %>
-      </ul>
+      <%= render 'search/facet', name: name, facet: facet %>
     <% end %>
-
   </div>
 </div>

@@ -1,74 +1,42 @@
-class GithubOrganisation < ActiveRecord::Base
-  API_FIELDS = [:name, :login, :blog, :email, :location, :description]
+class GithubOrganisation < ApplicationRecord
+  include Profile
 
-  has_many :github_repositories
-  has_many :source_github_repositories, -> { where fork: false }, anonymous_class: GithubRepository
-  has_many :open_source_github_repositories, -> { where fork: false, private: false }, anonymous_class: GithubRepository
-  has_many :dependencies, through: :open_source_github_repositories
+  API_FIELDS = [:name, :login, :blog, :email, :location, :bio]
+
+  has_many :repositories
+  has_many :source_repositories, -> { where fork: false }, anonymous_class: Repository
+  has_many :open_source_repositories, -> { where fork: false, private: false }, anonymous_class: Repository
+  has_many :dependencies, through: :open_source_repositories
   has_many :favourite_projects, -> { group('projects.id').order("COUNT(projects.id) DESC") }, through: :dependencies, source: :project
-  has_many :contributors, -> { group('github_users.id').order("sum(github_contributions.count) DESC") }, through: :open_source_github_repositories, source: :contributors
-  has_many :projects, through: :open_source_github_repositories
+  has_many :all_dependent_repos, -> { group('repositories.id') }, through: :favourite_projects, source: :repository
+  has_many :contributors, -> { group('github_users.id').order("sum(contributions.count) DESC") }, through: :open_source_repositories, source: :contributors
+  has_many :projects, through: :open_source_repositories
 
   validates :login, uniqueness: true, if: lambda { self.login_changed? }
   validates :github_id, uniqueness: true, if: lambda { self.github_id_changed? }
 
   after_commit :async_sync, on: :create
 
-  scope :most_repos, -> { joins(:open_source_github_repositories).select('github_organisations.*, count(github_repositories.id) AS repo_count').group('github_organisations.id').order('repo_count DESC') }
-  scope :most_stars, -> { joins(:open_source_github_repositories).select('github_organisations.*, sum(github_repositories.stargazers_count) AS star_count, count(github_repositories.id) AS repo_count').group('github_organisations.id').order('star_count DESC') }
-  scope :newest, -> { joins(:open_source_github_repositories).select('github_organisations.*, count(github_repositories.id) AS repo_count').group('github_organisations.id').order('created_at DESC').having('count(github_repositories.id) > 0') }
+  scope :most_repos, -> { joins(:open_source_repositories).select('github_organisations.*, count(repositories.id) AS repo_count').group('github_organisations.id').order('repo_count DESC') }
+  scope :most_stars, -> { joins(:open_source_repositories).select('github_organisations.*, sum(repositories.stargazers_count) AS star_count, count(repositories.id) AS repo_count').group('github_organisations.id').order('star_count DESC') }
+  scope :newest, -> { joins(:open_source_repositories).select('github_organisations.*, count(repositories.id) AS repo_count').group('github_organisations.id').order('created_at DESC').having('count(repositories.id) > 0') }
   scope :visible, -> { where(hidden: false) }
+  scope :with_login, -> { where("github_organisations.login <> ''") }
 
   def meta_tags
     {
-      title: "#{to_s} on GitHub",
-      description: "GitHub repositories created and contributed to by #{to_s}",
+      title: "#{self} on GitHub",
+      description: "GitHub repositories created by #{self}",
       image: avatar_url(200)
     }
   end
 
-  def github_contributions
-    GithubContribution.none
-  end
-
-  def top_favourite_projects
-    Project.where(id: top_favourite_project_ids).maintained.order("position(','||projects.id::text||',' in '#{top_favourite_project_ids.join(',')}')")
-  end
-
-  def top_favourite_project_ids
-    Rails.cache.fetch "org:#{self.id}:top_favourite_project_ids:v2", :expires_in => 1.week, race_condition_ttl: 2.minutes do
-      favourite_projects.limit(10).pluck(:id)
-    end
-  end
-
-  def top_contributors
-    GithubUser.where(id: top_contributor_ids).order("position(','||github_users.id::text||',' in '#{top_contributor_ids.join(',')}')")
-  end
-
-  def top_contributor_ids
-    Rails.cache.fetch "org:#{self.id}:top_contributor_ids", :expires_in => 1.week, race_condition_ttl: 2.minutes do
-      contributors.visible.limit(50).pluck(:id)
-    end
+  def contributions
+    Contribution.none
   end
 
   def org?
     true
-  end
-
-  def avatar_url(size = 60)
-    "https://avatars.githubusercontent.com/u/#{github_id}?size=#{size}"
-  end
-
-  def github_url
-    "https://github.com/#{login}"
-  end
-
-  def to_s
-    name.presence || login
-  end
-
-  def to_param
-    login
   end
 
   def company
@@ -83,13 +51,40 @@ class GithubOrganisation < ActiveRecord::Base
     begin
       r = AuthToken.client.org(login_or_id).to_hash
       return false if r.blank?
-      g = GithubOrganisation.find_or_initialize_by(github_id: r[:id])
-      g.github_id = r[:id]
-      g.assign_attributes r.slice(*GithubOrganisation::API_FIELDS)
-      g.save
-      g
-    rescue Octokit::RepositoryUnavailable, Octokit::NotFound, Octokit::Forbidden, Octokit::InternalServerError, Octokit::BadGateway, Octokit::ClientError=> e
-      p e
+
+      org = nil
+      org_by_id = GithubOrganisation.find_by_github_id(r[:id])
+      if r[:login].present?
+        org_by_login = GithubOrganisation.where("lower(login) = ?", r[:login].downcase).first
+      else
+        org_by_login = nil
+      end
+
+      if org_by_id # its fine
+        if org_by_id.login.try(:downcase) == r[:login].try(:downcase)
+          org = org_by_id
+        else
+          if org_by_login && !org_by_login.download_from_github
+            org_by_login.destroy
+          end
+          org_by_id.login = r[:login]
+          org_by_id.save!
+          org = org_by_id
+        end
+      elsif org_by_login # conflict
+        if org_by_login.download_from_github_by_login
+          org = org_by_login if org_by_login.github_id == r[:id]
+        end
+        org_by_login.destroy if org.nil?
+      end
+      if org.nil?
+        org = GithubOrganisation.create!(github_id: r[:id], login: r[:login])
+      end
+
+      org.assign_attributes r.slice(*GithubOrganisation::API_FIELDS)
+      org.save
+      org
+    rescue *RepositoryHost::Github::IGNORABLE_EXCEPTIONS
       false
     end
   end
@@ -105,18 +100,24 @@ class GithubOrganisation < ActiveRecord::Base
   end
 
   def download_from_github
-    update_attributes(github_client.org(github_id).to_hash.slice(:login, :name, :email, :blog, :location, :description))
-  rescue Octokit::RepositoryUnavailable, Octokit::NotFound, Octokit::Forbidden, Octokit::InternalServerError, Octokit::BadGateway, Octokit::ClientError=> e
+    download_from_github_by(github_id)
+  end
+
+  def download_from_github_by_login
+    download_from_github_by(login)
+  end
+
+  def download_from_github_by(id_or_login)
+    GithubOrganisation.create_from_github(github_client.org(id_or_login))
+  rescue *RepositoryHost::Github::IGNORABLE_EXCEPTIONS
     nil
   end
 
   def download_repos
     github_client.org_repos(login).each do |repo|
-      GithubCreateWorker.perform_async(repo.full_name)
+      CreateRepositoryWorker.perform_async('GitHub', repo.full_name)
     end
-  rescue Octokit::Unauthorized, Octokit::RepositoryUnavailable, Octokit::NotFound, Octokit::Forbidden, Octokit::InternalServerError, Octokit::BadGateway, Octokit::ClientError=> e
+  rescue *RepositoryHost::Github::IGNORABLE_EXCEPTIONS
     nil
   end
-
-  # TODO download members
 end
